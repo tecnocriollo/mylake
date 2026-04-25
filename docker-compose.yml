@@ -21,10 +21,39 @@ services:
       RUSTFS_ACCESS_KEY: mylake-access
       RUSTFS_SECRET_KEY: mylake-secret-key
     ports:
-      - "9000:9000"
+      - "9001:9000"
     volumes:
       - rustfs-data:/data
 
 volumes:
   postgres-data:
   rustfs-data:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://admin:change-me-locally@postgres:5432/mylake
+      JWT_SECRET: dev-secret-change-in-production
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/tmp
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
