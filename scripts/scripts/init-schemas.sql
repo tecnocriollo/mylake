@@ -1,0 +1,2 @@
+CREATE SCHEMA IF NOT EXISTS ducklake_catalog;
+CREATE SCHEMA IF NOT EXISTS auth_mgmt;
