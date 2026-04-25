@@ -4,10 +4,12 @@ WORKDIR /app
 
 RUN apk add --no-cache git
 
-COPY go.mod go.sum ./
-RUN go mod download
-
+# Copy all source files first
 COPY . .
+
+# Download dependencies
+RUN go mod tidy
+RUN go mod download
 
 EXPOSE 8080
 

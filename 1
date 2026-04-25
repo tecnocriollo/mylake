@@ -1,0 +1,95 @@
+ Image node:20-alpine Pulling 
+ 4feea04c1543 Pulling fs layer 0B
+ b2cbbfe903b0 Pulling fs layer 0B
+ fff4e2c1b189 Pulling fs layer 0B
+ 0f92261bcd1c Download complete 0B
+ 14f8540414db Download complete 0B
+ fff4e2c1b189 Download complete 0B
+ 4feea04c1543 Downloading 1.049MB
+ b2cbbfe903b0 Download complete 0B
+ 4feea04c1543 Downloading 3.146MB
+ 4feea04c1543 Downloading 6.291MB
+ 4feea04c1543 Downloading 7.34MB
+ 4feea04c1543 Downloading 11.53MB
+ 4feea04c1543 Downloading 13.63MB
+ 4feea04c1543 Downloading 16.78MB
+ 4feea04c1543 Downloading 19.74MB
+ 4feea04c1543 Downloading 22.02MB
+ 4feea04c1543 Downloading 24.12MB
+ 4feea04c1543 Downloading 30.41MB
+ 4feea04c1543 Downloading 33.55MB
+ 4feea04c1543 Downloading 37.75MB
+ 4feea04c1543 Downloading 41.94MB
+ 4feea04c1543 Download complete 0B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 1B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 2B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ 4feea04c1543 Extracting 3B
+ b2cbbfe903b0 Extracting 1B
+ 4feea04c1543 Pull complete 0B
+ fff4e2c1b189 Extracting 1B
+ b2cbbfe903b0 Pull complete 0B
+ fff4e2c1b189 Pull complete 0B
+ Image node:20-alpine Pulled 
+ Image mylake-backend Building 
+Dockerfile:7
+
+--------------------
+
+   5 |     RUN apk add --no-cache git
+
+   6 |     
+
+   7 | >>> COPY go.mod go.sum ./
+
+   8 |     RUN go mod download
+
+   9 |     
+
+--------------------
+
+failed to solve: failed to compute cache key: failed to calculate checksum of ref trgxn0xjwj2j7tmd02hpo2u39::viuadaglbgbrju2v2x5zjyeku: "/go.sum": not found
+
+ Image mylake-backend Building 
+ Image mylake-backend Built 
+ Network mylake_default Creating 
+ Network mylake_default Created 
+ Container mylake-frontend-1 Creating 
+ Container mylake-postgres-1 Creating 
+ Container mylake-rustfs-1 Creating 
+ Container mylake-rustfs-1 Created 
+ Container mylake-frontend-1 Created 
+ Container mylake-postgres-1 Created 
+ Container mylake-backend-1 Creating 
+ Container mylake-backend-1 Created 
+ Container mylake-postgres-1 Starting 
+ Container mylake-rustfs-1 Starting 
+ Container mylake-frontend-1 Starting 
+ Container mylake-frontend-1 Started 
+ Container mylake-rustfs-1 Started 
+Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint mylake-postgres-1 (57a9b6d8e81fbe0169321f7a857521562453119a2b3f4c750c6a31bfbcb4c015): Bind for 127.0.0.1:5432 failed: port is already allocated

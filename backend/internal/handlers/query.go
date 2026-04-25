@@ -43,7 +43,7 @@ func (h *QueryHandler) Execute(c *gin.Context) {
 	}
 
 	// Collect results
-	var results []map[string]interface{}{}
+	var results []map[string]interface{}
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
