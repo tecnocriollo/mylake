@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(/home/pato/projects/mylake/*)",
+      "Write(/home/pato/projects/mylake/*)",
+      "Read(/home/pato/projects/mylake/*)"
+    ]
+  }
+}
