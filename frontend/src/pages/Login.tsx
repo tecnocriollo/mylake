@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { API_BASE_URL } from '../config'
 
 interface LoginProps {
   onLogin: (token: string) => void
@@ -22,7 +23,7 @@ function Login({ onLogin }: LoginProps) {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const payload = isRegister ? { username, email, password } : { username, password }
       
-      const response = await axios.post(`http://localhost:8080${endpoint}`, payload)
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, payload)
       onLogin(response.data.token)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Something went wrong')

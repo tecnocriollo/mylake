@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: change-me-locally
       POSTGRES_DB: mylake
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
@@ -21,13 +21,9 @@ services:
       RUSTFS_ACCESS_KEY: mylake-access
       RUSTFS_SECRET_KEY: mylake-secret-key
     ports:
-      - "9001:9000"
+      - "0.0.0.0:9001:9000"
     volumes:
       - rustfs-data:/data
-
-volumes:
-  postgres-data:
-  rustfs-data:
 
   backend:
     build:
@@ -38,7 +34,7 @@ volumes:
       JWT_SECRET: dev-secret-change-in-production
       PORT: 8080
     ports:
-      - "8080:8080"
+      - "0.0.0.0:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,11 +45,15 @@ volumes:
   frontend:
     image: node:20-alpine
     working_dir: /app
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     ports:
-      - "5173:5173"
+      - "0.0.0.0:5173:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
+
+volumes:
+  postgres-data:
+  rustfs-data:

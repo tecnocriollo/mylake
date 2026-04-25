@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Editor from '@monaco-editor/react'
 import axios from 'axios'
+import { API_BASE_URL } from '../config'
 
 interface WorkbenchProps {
   token: string
@@ -19,7 +20,7 @@ function Workbench({ token }: WorkbenchProps) {
 
     try {
       const response = await axios.post(
-        'http://localhost:8080/api/query',
+        `${API_BASE_URL}/api/query`,
         { query },
         { headers: { Authorization: `Bearer ${token}` } }
       )
