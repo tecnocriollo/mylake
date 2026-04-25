@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rustfs
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: rustfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      containers:
+      - name: rustfs
+        image: rustfs/rustfs:latest
+        env:
+        - name: RUSTFS_ACCESS_KEY
+          value: {{ .Values.rustfs.accessKey }}
+        - name: RUSTFS_SECRET_KEY
+          value: {{ .Values.rustfs.secretKey }}
+        ports:
+        - containerPort: 9000
+        volumeMounts:
+        - name: rustfs-data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: rustfs-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi

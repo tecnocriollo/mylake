@@ -1,0 +1,8 @@
+namespace: mylake
+postgres:
+  user: admin
+  password: change-me-locally
+  database: mylake
+rustfs:
+  accessKey: mylake-access
+  secretKey: mylake-secret-key
