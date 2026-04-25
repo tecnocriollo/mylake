@@ -52,6 +52,25 @@ services:
     environment:
       - NODE_ENV=development
 
+  jupyter:
+    image: jupyter/pyspark-notebook:latest
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: "mylake-token-123"
+      SPARK_OPTS: "--driver-memory=2g --executor-memory=2g"
+    ports:
+      - "0.0.0.0:8888:8888"
+    volumes:
+      - jupyter-data:/home/jovyan/work
+      - ./notebooks:/home/jovyan/notebooks
+    command: >
+      start-notebook.sh
+      --NotebookApp.token='mylake-token-123'
+      --NotebookApp.password=''
+      --NotebookApp.allow_origin='*'
+      --NotebookApp.disable_check_xsrf=True
+
 volumes:
   postgres-data:
   rustfs-data:
+  jupyter-data:
