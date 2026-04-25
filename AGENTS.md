@@ -3,29 +3,27 @@
 
 **Project:** MyLake - production-like personal lakehouse platform for Kubernetes/k3s.
 
-**Stack:** Kubernetes/k3s, Helm v3, PostgreSQL 16+, RustFS, DuckLake, DuckDB, Apache Spark, Go, Gin or Echo, pgx, client-go, React, TailwindCSS, Monaco Editor, JupyterHub.
+**Stack:** PostgreSQL 16+, RustFS, DuckLake, DuckDB, Apache Spark, Go, Gin or Echo, pgx, client-go, React, TailwindCSS, Monaco Editor, JupyterHub, Docker Compose (local dev), Kubernetes/k3s (production).
 
 **Key rules:**
 - Use PostgreSQL schemas `auth_mgmt` for users/RBAC/sessions/Spark metadata and `ducklake_catalog` for DuckLake metadata.
-- Deploy foundation infrastructure as Helm chart `deploy/helm/mylake-base` in namespace `mylake`.
-- Model RustFS and PostgreSQL as StatefulSets with PVC-backed storage.
+- Local dev uses `docker-compose.yml` (postgres + rustfs). Helm charts were removed.
 - Implementation plans in `docs/superpowers/plans` require `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
 **Commands:**
-- `helm lint deploy/helm/mylake-base` - validate the base Helm chart.
-- `helm upgrade --install mylake-base ./deploy/helm/mylake-base --create-namespace` - install foundation stack.
-- `kubectl exec -n mylake -it statefulset/postgres -- psql -U admin -d mylake -c "\dn"` - verify schemas.
-- `kubectl get pods -n mylake -l app=rustfs` - verify RustFS pod health.
+- `docker compose up -d` - start local postgres + rustfs.
+- `docker compose exec postgres psql -U admin -d mylake -c "\dn"` - verify schemas.
+- `docker compose ps` - check container health.
 
 ## Last Session
-_2026-04-25 - Synced project docs and installed/unforget context tooling._
-- Read the MyLake superpower spec and infrastructure implementation plan.
-- Fixed schema mismatch by updating the infrastructure plan from `ducklake`/`platform` to `ducklake_catalog`/`auth_mgmt`.
-- Installed the Claude `unforget` skill into Codex via `~/.codex/skills/unforget` symlink.
-- Created assistant instruction files with this managed context block.
-- `docs/` was observed as untracked in git during the session.
+_2026-04-25 - Completed infra foundation, started frontend brainstorm._
+- Installed Docker, created `docker-compose.yml` for postgres + rustfs local dev.
+- Verified deployment: `ducklake_catalog` + `auth_mgmt` schemas confirmed, rustfs running on port 9000.
+- Merged `feat/infra-foundation` → `master`, removed helm charts (user preference: docker-compose only).
+- Added `scripts/init-schemas.sql` and `scripts/install-k8s-tools.sh`.
+- Started frontend brainstorm — no backend built yet; next question: build Go backend + frontend together or stub backend first?
 
 ## Docs
-- `docs/superpowers/specs/2026-04-24-mylake-design.md` - Draft architecture for the full MyLake lakehouse platform.
-- `docs/superpowers/plans/2026-04-24-infrastructure-foundation.md` - Helm implementation plan for PostgreSQL and RustFS foundation infrastructure.
+- `docs/superpowers/specs/2026-04-24-mylake-design.md` - Full MyLake architecture spec (Go backend, React frontend, DuckLake, Spark, JupyterHub).
+- `docs/superpowers/plans/2026-04-24-infrastructure-foundation.md` - Completed infra plan (postgres + rustfs).
 <!-- /unforget -->
