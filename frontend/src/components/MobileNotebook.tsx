@@ -52,7 +52,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   const [editingCellId, setEditingCellId] = useState<string | null>(null)
   const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set())
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set())
-  const [useSpark, setUseSpark] = useState(false)  // Checkbox para inicializar Spark
+  const [notebookType, setNotebookType] = useState<'python' | 'spark'>('python')  // Tipo de notebook
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [newNotebookName, setNewNotebookName] = useState('')
   const [showNewNotebookModal, setShowNewNotebookModal] = useState(false)
@@ -230,8 +230,8 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     const cell = cells.find(c => c.id === cellId)
     if (!cell || cell.cell_type !== 'code') return
     
-    // Código de inicialización de Spark (similar a Databricks)
-    const sparkInitCode = useSpark ? `
+    // Código de inicialización según tipo de notebook
+    const initCode = notebookType === 'spark' ? `
 # Inicializar SparkSession (auto-generated)
 from pyspark.sql import SparkSession
 if 'spark' not in globals():
@@ -244,7 +244,7 @@ if 'spark' not in globals():
 
 ` : ''
     
-    const code = sparkInitCode + cell.source.join('')
+    const code = initCode + cell.source.join('')
     setExecutingCells(prev => new Set([...prev, cellId]))
     
     try {
@@ -303,7 +303,7 @@ if 'spark' not in globals():
   // Estado para mostrar mensaje de inicialización de Spark
   const isSparkInitializing = (cellId: string) => {
     const cell = cells.find(c => c.id === cellId)
-    return useSpark && executingCells.has(cellId) && cell?.source?.join('').includes('SparkSession')
+    return notebookType === 'spark' && executingCells.has(cellId) && cell?.source?.join('').includes('SparkSession')
   }
 
   // Toggle output collapse
@@ -512,18 +512,14 @@ if 'spark' not in globals():
           {success && (
             <span className="text-xs text-green-600">{success}</span>
           )}
-          {/* Checkbox para activar Spark */}
-          <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={useSpark}
-              onChange={(e) => setUseSpark(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-            />
-            <span className={useSpark ? 'text-orange-600 font-medium' : 'text-gray-600'}>
-              ⚡ Spark
-            </span>
-          </label>
+          <select
+            value={notebookType}
+            onChange={(e) => setNotebookType(e.target.value as 'python' | 'spark')}
+            className="text-xs border rounded px-2 py-1 bg-white"
+          >
+            <option value="python">🐍 Python</option>
+            <option value="spark">⚡ Spark</option>
+          </select>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href)
@@ -540,7 +536,7 @@ if 'spark' not in globals():
           >
             💾 Save
           </button>
-          {useSpark && (
+          {notebookType === 'spark' && (
             <button
               onClick={async () => {
                 try {
