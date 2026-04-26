@@ -440,6 +440,14 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 					})
 					return
 				}
+				if websocket.IsUnexpectedCloseError(err) {
+					// Connection closed unexpectedly
+					c.JSON(http.StatusOK, ExecuteResponse{
+						Success: len(outputs) > 0,
+						Outputs: outputs,
+					})
+					return
+				}
 				// Timeout, check if we have outputs
 				if len(outputs) > 0 {
 					c.JSON(http.StatusOK, ExecuteResponse{
