@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import CodeMirrorEditor from './CodeMirrorEditor'
 import axios from 'axios'
 import { API_BASE_URL } from '../config'
@@ -18,7 +19,7 @@ interface Cell {
 }
 
 interface Output {
-  output_type: 'stream' | 'display_data' | 'execute_result' | 'error'
+  output_type: 'stream' | 'stdout' | 'stderr' | 'display_data' | 'execute_result' | 'error'
   text?: string[]
   data?: Record<string, any>
   ename?: string
@@ -42,6 +43,7 @@ interface NotebookInfo {
 }
 
 export default function MobileNotebook({ token, notebookPath }: MobileNotebookProps) {
+  const navigate = useNavigate()
   const [notebooks, setNotebooks] = useState<NotebookInfo[]>([])
   const [currentNotebook, setCurrentNotebook] = useState<Notebook | null>(null)
   const [currentPath, setCurrentPath] = useState<string>(notebookPath || '')
@@ -98,10 +100,12 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       setCells(cellsWithIds)
       setCurrentPath(path)
       setError('')
+      // Navigate to notebook URL
+      navigate(`/notebook/${encodeURIComponent(path)}`)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load notebook')
     }
-  }, [token])
+  }, [token, navigate])
 
   // Initial load
   useEffect(() => {
@@ -362,7 +366,9 @@ if 'spark' not in globals():
   const renderOutput = (output: Output): string => {
     switch (output.output_type) {
       case 'stream':
-        return (output.text || []).join('')
+      case 'stdout':
+      case 'stderr':
+        return (output.text || []).join('\n')
       case 'display_data':
       case 'execute_result':
         if (output.data?.['text/plain']) {
@@ -518,6 +524,16 @@ if 'spark' not in globals():
               ⚡ Spark
             </span>
           </label>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href)
+              setSuccess('URL copied!')
+              setTimeout(() => setSuccess(''), 2000)
+            }}
+            className="bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-medium"
+          >
+            🔗 Share
+          </button>
           <button
             onClick={saveNotebook}
             className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium"

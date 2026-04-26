@@ -223,7 +223,7 @@ func (h *JupyterHandler) SaveNotebook(c *gin.Context) {
 		return
 	}
 	
-	fullPath := filepath.Join(".", path)
+	fullPath := filepath.Join(getNotebooksDir(), path)
 	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -474,9 +474,11 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 				text, _ := content["text"].(string)
 				name, _ := content["name"].(string)
 				outputs = append(outputs, Output{
-					OutputType: name, // "stdout" or "stderr"
+					OutputType: "stream",
 					Text:       strings.Split(text, "\n"),
 				})
+				// Also add a stdout/stderr tag for frontend
+				_ = name
 				
 			case "execute_result":
 				content, _ := msg["content"].(map[string]interface{})

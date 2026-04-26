@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Workbench from './pages/Workbench'
 import NotebooksPage from './pages/NotebooksPage'
+import NotebookEditor from './pages/NotebookEditor'
 import ErrorPage from './pages/ErrorPage'
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
       }>
         <Route index element={<Workbench token={token!} />} />
         <Route path="/notebooks" element={<NotebooksPage token={token!} />} />
+        <Route path="/notebook/:path" element={<NotebookEditor token={token!} />} />
       </Route>
       <Route path="/error" element={<ErrorPage />} />
     </Routes>
