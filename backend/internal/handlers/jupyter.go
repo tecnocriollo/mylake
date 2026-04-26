@@ -145,9 +145,9 @@ func (h *JupyterHandler) ListNotebooks(c *gin.Context) {
 		
 		notebooks = append(notebooks, NotebookInfo{
 			Name:     entry.Name(),
-			Path:     filepath.Join("notebooks", entry.Name()),
+			Path:     entry.Name(),
 			Modified: info.ModTime(),
-			Created:  info.ModTime(), // Using mod time as fallback
+			Created:  info.ModTime(),
 		})
 	}
 	
@@ -306,7 +306,7 @@ func (h *JupyterHandler) CreateNotebook(c *gin.Context) {
 		return
 	}
 	
-	c.JSON(http.StatusCreated, gin.H{"path": filepath.Join("notebooks", name)})
+	c.JSON(http.StatusCreated, gin.H{"path": name})
 }
 
 // DeleteNotebook deletes a notebook
