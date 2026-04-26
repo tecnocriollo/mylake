@@ -284,6 +284,40 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     if (notebookType === 'spark' && !sparkInitialized) {
       initCode = `
 # Inicializar SparkSession (auto-generated)
+import logging
+import sys
+
+# Configurar logging de py4j
+py4j_logger = logging.getLogger('py4j')
+py4j_logger.setLevel(logging.INFO)
+handler = logging.FileHandler('/var/log/spark/pyspark.log')
+handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+py4j_logger.addHandler(handler)
+
+# También redirigir stdout/stderr
+class LoggerWriter:
+    def __init__(self, logger, level):
+        self.logger = logger
+        self.level = level
+        self.buffer = ''
+    
+    def write(self, message):
+        self.buffer += message
+        if '\n' in self.buffer:
+            lines = self.buffer.split('\n')
+            for line in lines[:-1]:
+                self.logger.log(self.level, line)
+            self.buffer = lines[-1]
+    
+    def flush(self):
+        if self.buffer:
+            self.logger.log(self.level, self.buffer)
+            self.buffer = ''
+
+sys.stdout = LoggerWriter(py4j_logger, logging.INFO)
+sys.stderr = LoggerWriter(py4j_logger, logging.ERROR)
+
+from py4j.java_gateway import java_import
 from pyspark.sql import SparkSession
 spark = SparkSession.builder \\
     .appName("MyLake-PySpark") \\
