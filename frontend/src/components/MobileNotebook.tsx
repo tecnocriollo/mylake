@@ -54,6 +54,12 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set())
   const [notebookType, setNotebookType] = useState<'python' | 'spark'>('python')  // Tipo de notebook
   const [sparkInitialized, setSparkInitialized] = useState(false)  // Track if Spark is already initialized
+  const [_kernelId, setKernelId] = useState<string | null>(null)  // Kernel ID actual
+
+  // Load kernel info on mount
+  useEffect(() => {
+    getActiveKernel()
+  }, [])
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [newNotebookName, setNewNotebookName] = useState('')
   const [showNewNotebookModal, setShowNewNotebookModal] = useState(false)
@@ -184,6 +190,47 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       setTimeout(() => setSuccess(''), 2000)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete')
+    }
+  }
+
+  // Obtener kernel activo
+  const getActiveKernel = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/jupyter/kernels`, { headers })
+      const kernels = response.data || []
+      if (kernels.length > 0) {
+        setKernelId(kernels[0].id)
+        return kernels[0].id
+      }
+      return null
+    } catch (err) {
+      console.error('Failed to get kernels:', err)
+      return null
+    }
+  }
+
+  // Restart kernel
+  const restartKernel = async () => {
+    if (!confirm('Restart kernel? All variables will be lost.')) return
+    
+    try {
+      // Get current kernel
+      const currentKernel = await getActiveKernel()
+      if (currentKernel) {
+        // Restart via Jupyter API
+        await axios.post(
+          `${API_BASE_URL}/api/jupyter/proxy/api/kernels/${currentKernel}/restart`,
+          {},
+          { headers }
+        )
+      }
+      // Reset Spark state
+      setSparkInitialized(false)
+      setKernelId(null)
+      setSuccess('Kernel restarted!')
+      setTimeout(() => setSuccess(''), 2000)
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to restart kernel')
     }
   }
 
@@ -529,6 +576,13 @@ print(f"Spark Version: {spark.version}")
             <option value="python">🐍 Python</option>
             <option value="spark">⚡ Spark</option>
           </select>
+          <button
+            onClick={restartKernel}
+            className="bg-red-600 text-white px-3 py-1.5 rounded text-sm font-medium"
+            title="Restart Kernel"
+          >
+            🔄 Restart
+          </button>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href)
