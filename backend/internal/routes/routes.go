@@ -51,6 +51,7 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 		protected.POST("/jupyter/execute", jupyterHandler.ExecuteCell)
 		protected.POST("/jupyter/execute-poll", jupyterHandler.ExecuteCellWithPolling)
 		protected.GET("/jupyter/kernels", jupyterHandler.GetKernels)
+		protected.GET("/jupyter/spark-logs", jupyterHandler.GetSparkLogs)
 		protected.Any("/jupyter/proxy/:path", jupyterHandler.ProxyRequest)
 	}
 }

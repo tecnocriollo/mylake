@@ -540,6 +540,25 @@ if 'spark' not in globals():
           >
             💾 Save
           </button>
+          {useSpark && (
+            <button
+              onClick={async () => {
+                try {
+                  const response = await axios.get(
+                    `${API_BASE_URL}/api/jupyter/spark-logs`,
+                    { headers }
+                  )
+                  const logs = response.data.logs || response.data.message || 'No logs available'
+                  alert(logs.slice(-2000) || 'No logs yet')
+                } catch (err: any) {
+                  setError('Failed to fetch logs: ' + err.message)
+                }
+              }}
+              className="bg-orange-600 text-white px-3 py-1.5 rounded text-sm font-medium"
+            >
+              📜 Logs
+            </button>
+          )}
         </div>
       </div>
 

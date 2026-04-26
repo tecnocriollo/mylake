@@ -716,3 +716,21 @@ func (h *JupyterHandler) ProxyRequest(c *gin.Context) {
 	// Copy body
 	io.Copy(c.Writer, resp.Body)
 }
+
+// GetSparkLogs reads the Spark logs from the Jupyter container
+func (h *JupyterHandler) GetSparkLogs(c *gin.Context) {
+	logPath := "/var/log/spark/pyspark.log"
+	
+	// Read log file
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, gin.H{"logs": "", "message": "No logs available yet"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"logs": string(data)})
+}
