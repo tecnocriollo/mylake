@@ -435,7 +435,7 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 			})
 			return
 		default:
-			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 			var msg map[string]interface{}
 			if err := func() error {
 				defer func() {
