@@ -219,6 +219,11 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     }
   }
 
+  // Reset sparkInitialized when notebook type changes
+  useEffect(() => {
+    setSparkInitialized(false)
+  }, [notebookType])
+
   // Restart kernel
   const restartKernel = async () => {
     if (!confirm('Restart kernel? All variables will be lost.')) return
@@ -358,8 +363,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
 
   // Estado para mostrar mensaje de inicialización de Spark
   const isSparkInitializing = (cellId: string) => {
-    const cell = cells.find(c => c.id === cellId)
-    return notebookType === 'spark' && executingCells.has(cellId) && cell?.source?.join('').includes('SparkSession')
+    return notebookType === 'spark' && executingCells.has(cellId) && !sparkInitialized
   }
 
   // Toggle output collapse
