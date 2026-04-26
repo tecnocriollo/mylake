@@ -66,8 +66,15 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     try {
       const response = await axios.get(`${API_BASE_URL}/api/jupyter/notebooks`, { headers })
       setNotebooks(response.data.notebooks || [])
+      setError('')
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load notebooks')
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to load notebooks'
+      setError(errorMsg)
+      if (err.response?.status === 401) {
+        setError('Session expired. Please login again.')
+        // Optionally redirect to login
+        // window.location.href = '/login'
+      }
     }
   }, [token])
 

@@ -7,9 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"strings"
-	"time"
+	"strings"\t"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -337,7 +337,7 @@ func (h *JupyterHandler) DeleteNotebook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "notebook deleted"})
 }
 
-// ExecuteCell executes a code cell via Jupyter kernel
+// ExecuteCell executes a code cell using Python subprocess via nbconvert
 func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 	var req ExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -345,45 +345,98 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 		return
 	}
 	
-	// First, ensure we have a kernel
-	kernelID, err := h.getOrCreateKernel()
+	// Create a temporary notebook with just this cell
+	tempNotebook := Notebook{
+		Metadata: map[string]interface{}{
+			"kernelspec": map[string]string{
+				"display_name": "Python 3",
+				"language":     "python",
+				"name":         "python3",
+			},
+		},
+		NbFormat:      4,
+		NbFormatMinor: 5,
+		Cells: []Cell{
+			{
+				CellType: "code",
+				ID:       uuid.New().String(),
+				Metadata: map[string]interface{}{},
+				Source:   strings.Split(req.Code, "\n"),
+				Outputs:  []Output{},
+			},
+		},
+	}
+	
+	// Write temp notebook
+	tempDir := os.TempDir()
+	tempFile := filepath.Join(tempDir, fmt.Sprintf("exec_%s.ipynb", uuid.New().String()))
+	defer os.Remove(tempFile)
+	
+	data, err := json.Marshal(tempNotebook)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create kernel: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal notebook: " + err.Error()})
 		return
 	}
 	
-	// Execute the code
-	execReq := map[string]interface{}{
-		"code": req.Code,
-		"silent": false,
-		"store_history": true,
-		"user_expressions": map[string]interface{}{},
-		"allow_stdin": false,
-		"stop_on_error": true,
+	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write temp file: " + err.Error()})
+		return
 	}
 	
-	execBody, _ := json.Marshal(execReq)
-	url := fmt.Sprintf("%s/api/kernels/%s/execute?token=%s", h.BaseURL, kernelID, h.Token)
+	// Execute using nbconvert
+	cmd := exec.Command("python3", "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute",
+		"--ExecutePreprocessor.timeout=30",
+		"--output", tempFile,
+		tempFile)
 	
-	resp, err := http.Post(url, "application/json", bytes.NewReader(execBody))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	
+	err = cmd.Run()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "execution failed: " + err.Error()})
+		// Even if command fails, check if output was generated
+		if stderr.Len() > 0 {
+			c.JSON(http.StatusOK, ExecuteResponse{
+				Success: false,
+				Outputs: []Output{
+					{
+						OutputType: "error",
+						Ename:      "ExecutionError",
+						Evalue:     stderr.String(),
+					},
+				},
+			})
+			return
+		}
+	}
+	
+	// Read the executed notebook
+	outputData, err := os.ReadFile(tempFile)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read output: " + err.Error()})
 		return
 	}
-	defer resp.Body.Close()
 	
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "execution failed: " + string(body)})
+	var executedNotebook Notebook
+	if err := json.Unmarshal(outputData, &executedNotebook); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse output: " + err.Error()})
 		return
 	}
 	
-	var result ExecuteResponse
-	result.Success = true
-	
-	// For simplicity, we return success. In a full implementation,
-	// you'd parse the WebSocket or polling response for actual outputs
-	c.JSON(http.StatusOK, result)
+	// Extract outputs from the cell
+	if len(executedNotebook.Cells) > 0 {
+		cell := executedNotebook.Cells[0]
+		c.JSON(http.StatusOK, ExecuteResponse{
+			Success: true,
+			Outputs: cell.Outputs,
+		})
+	} else {
+		c.JSON(http.StatusOK, ExecuteResponse{
+			Success: true,
+			Outputs: []Output{},
+		})
+	}
 }
 
 // ExecuteCellWithPolling executes code and waits for results
