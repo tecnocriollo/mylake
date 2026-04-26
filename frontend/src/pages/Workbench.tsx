@@ -43,6 +43,14 @@ function Workbench({ token }: WorkbenchProps) {
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const handleCreateTable = (schema: string, template: string) => {
+    const newQuery = `-- Crear tabla en esquema: ${schema}\n${template}`
+    setQuery(newQuery)
+    setActiveTab('sql')
+    // Scroll to editor
+    document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
   const handleSelectFile = (path: string) => {
     // Abrir archivo en Jupyter
     const notebookUrl = `http://207.180.223.160:8888/lab/workspaces/lake/tree/${path}?token=mylake-token-123`
@@ -57,6 +65,7 @@ function Workbench({ token }: WorkbenchProps) {
           token={token} 
           onSelectTable={handleSelectTable}
           onSelectFile={handleSelectFile}
+          onCreateTable={handleCreateTable}
         />
       </div>
 

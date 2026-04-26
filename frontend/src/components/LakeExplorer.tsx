@@ -16,9 +16,10 @@ interface LakeExplorerProps {
   token: string
   onSelectTable?: (schema: string, table: string) => void
   onSelectFile?: (path: string) => void
+  onCreateTable?: (schema: string, template: string) => void
 }
 
-function LakeExplorer({ token, onSelectTable, onSelectFile }: LakeExplorerProps) {
+function LakeExplorer({ token, onSelectTable, onSelectFile, onCreateTable }: LakeExplorerProps) {
   const [activeTab, setActiveTab] = useState<'tables' | 'files'>('tables')
   const [schemas, setSchemas] = useState<LakeItem | null>(null)
   const [files, setFiles] = useState<LakeItem | null>(null)
@@ -168,20 +169,33 @@ function LakeExplorer({ token, onSelectTable, onSelectFile }: LakeExplorerProps)
     }
   }
 
+  const handleCreateTable = (schemaName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const template = `CREATE TABLE ${schemaName}.nueva_tabla (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`
+    onCreateTable?.(schemaName, template)
+  }
+
   const renderTableTree = (item: LakeItem, level = 0) => {
     const padding = level * 12
     const isExpanded = expandedSchemas.has(item.name)
+    const isSchema = item.type === 'schema'
 
     return (
       <div key={item.path} style={{ paddingLeft: `${padding}px` }}>
         <div
-          className={`flex items-center space-x-2 px-2 py-1 text-sm rounded cursor-pointer ${
+          className={`group flex items-center space-x-2 px-2 py-1 text-sm rounded cursor-pointer ${
             item.type === 'table' || item.type === 'view'
               ? 'hover:bg-blue-50 text-gray-700'
               : 'hover:bg-gray-100 text-gray-800 font-medium'
           }`}
           onClick={() => {
-            if (item.type === 'schema') {
+            if (isSchema) {
               toggleSchema(item.name)
             } else if (item.type === 'table' || item.type === 'view') {
               onSelectTable?.(item.schema || '', item.name)
@@ -189,13 +203,24 @@ function LakeExplorer({ token, onSelectTable, onSelectFile }: LakeExplorerProps)
           }}
         >
           <span className="w-4 text-center">
-            {item.type === 'schema' && (isExpanded ? '▼' : '▶')}
+            {isSchema && (isExpanded ? '▼' : '▶')}
           </span>
           <span className="text-base">{getIcon(item)}</span>
-          <span className="truncate">{item.name}</span>
+          <span className="truncate flex-1">{item.name}</span>
+          
+          {/* Botón Crear Tabla en esquemas */}
+          {isSchema && onCreateTable && (
+            <button
+              onClick={(e) => handleCreateTable(item.name, e)}
+              className="hidden group-hover:block p-1 hover:bg-green-100 text-green-600 rounded"
+              title="Crear tabla"
+            >
+              ➕
+            </button>
+          )}
         </div>
 
-        {item.type === 'schema' && isExpanded && item.children?.map(child => 
+        {isSchema && isExpanded && item.children?.map(child => 
           renderTableTree(child, level + 1)
         )}
       </div>
