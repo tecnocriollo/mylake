@@ -15,6 +15,7 @@ function Workbench({ token }: WorkbenchProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [jupyterUrl, setJupyterUrl] = useState(`http://207.180.223.160:8888/lab/workspaces/lake?token=mylake-token-123`)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const executeQuery = async () => {
     setLoading(true)
@@ -39,7 +40,7 @@ function Workbench({ token }: WorkbenchProps) {
     const newQuery = `SELECT * FROM ${schema}.${table} LIMIT 100;`
     setQuery(newQuery)
     setActiveTab('sql')
-    // Scroll to editor
+    setSidebarOpen(false) // Close sidebar on mobile after selection
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -47,52 +48,89 @@ function Workbench({ token }: WorkbenchProps) {
     const newQuery = `-- Crear tabla en esquema: ${schema}\n${template}`
     setQuery(newQuery)
     setActiveTab('sql')
-    // Scroll to editor
+    setSidebarOpen(false)
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const handleSelectFile = (path: string) => {
-    // Abrir archivo en Jupyter
     const notebookUrl = `http://207.180.223.160:8888/lab/workspaces/lake/tree/${path}?token=mylake-token-123`
     setJupyterUrl(notebookUrl)
   }
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-120px)]">
+    <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-120px)] relative">
+      {/* Mobile Sidebar Toggle Button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed bottom-4 right-4 z-50 bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700"
+        aria-label={sidebarOpen ? 'Cerrar catálogo' : 'Abrir catálogo'}
+      >
+        {sidebarOpen ? '✕' : '📁'}
+      </button>
+
       {/* Sidebar - Lake Explorer */}
-      <div className="w-72 flex-shrink-0">
-        <LakeExplorer 
-          token={token} 
-          onSelectTable={handleSelectTable}
-          onSelectFile={handleSelectFile}
-          onCreateTable={handleCreateTable}
-        />
+      <div
+        className={`${
+          sidebarOpen
+            ? 'fixed inset-0 z-40 bg-black bg-opacity-50 lg:bg-transparent lg:static lg:inset-auto'
+            : 'hidden lg:block'
+        }`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSidebarOpen(false)
+        }}
+      >
+        <div
+          className={`${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          } transform transition-transform duration-300 ease-in-out
+            w-72 h-full lg:h-auto bg-white lg:bg-transparent shadow-2xl lg:shadow-none 
+            border-r lg:border-0 overflow-auto`}
+        >
+          <div className="p-4 lg:p-0">
+            {/* Mobile header */}
+            <div className="lg:hidden flex items-center justify-between mb-4 pb-2 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">📁 Catálogo</h2>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <LakeExplorer
+              token={token}
+              onSelectTable={handleSelectTable}
+              onSelectFile={handleSelectFile}
+              onCreateTable={handleCreateTable}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Tabs */}
         <div className="bg-white rounded-t-lg shadow border-b border-gray-200 flex-shrink-0">
           <div className="flex">
             <button
               onClick={() => setActiveTab('sql')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 ${
+              className={`px-4 lg:px-6 py-3 text-sm font-medium border-b-2 ${
                 activeTab === 'sql'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              📝 SQL Workbench
+              📝 SQL
             </button>
             <button
               onClick={() => setActiveTab('jupyter')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 ${
+              className={`px-4 lg:px-6 py-3 text-sm font-medium border-b-2 ${
                 activeTab === 'jupyter'
                   ? 'border-purple-500 text-purple-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              🐍 Jupyter Lab
+              🐍 Jupyter
             </button>
           </div>
         </div>
@@ -145,7 +183,7 @@ function Workbench({ token }: WorkbenchProps) {
                 </div>
               )}
 
-              {results && (
+              {results && results.columns && results.rows && (
                 <div className="border rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
                   <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
                     <span className="text-sm text-gray-600">
@@ -194,16 +232,28 @@ function Workbench({ token }: WorkbenchProps) {
                   <span className="font-medium text-gray-900">Jupyter Lab</span>
                   <span className="text-sm text-gray-500 ml-2">- Python + PySpark</span>
                 </div>
-                <div className="text-xs text-gray-400">
-                  💡 Haz clic en una tabla del catálogo para ver su código de acceso
-                </div>
+                <a
+                  href={jupyterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-purple-600 hover:text-purple-800 underline"
+                >
+                  Abrir en nueva pestaña ↗
+                </a>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 relative">
+                {/* Mobile warning */}
+                <div className="lg:hidden absolute top-0 left-0 right-0 bg-yellow-50 border-b border-yellow-200 p-2 text-xs text-yellow-800 text-center z-10">
+                  📱 En móvil, usa "Abrir en nueva pestaña" para mejor experiencia
+                </div>
                 <iframe
                   src={jupyterUrl}
                   className="w-full h-full border-0"
                   title="Jupyter Lab"
-                  allow="fullscreen"
+                  allow="fullscreen; clipboard-read; clipboard-write"
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
+                  loading="lazy"
+                  importance="high"
                 />
               </div>
             </div>

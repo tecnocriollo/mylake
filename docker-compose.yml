@@ -1,4 +1,21 @@
 services:
+  # Self-test service - runs first to verify dependencies
+  self-test:
+    image: alpine:latest
+    volumes:
+      - ./scripts/self-test.sh:/self-test.sh:ro
+    command: sh -c "apk add --no-cache netcat-openbsd postgresql-client curl && sh /self-test.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+      jupyter:
+        condition: service_healthy
+    networks:
+      - default
+    restart: "no"
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -36,6 +53,8 @@ services:
     ports:
       - "0.0.0.0:8080:8080"
     depends_on:
+      self-test:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     volumes:
@@ -52,6 +71,8 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
+    depends_on:
+      - backend
 
   jupyter:
     image: jupyter/pyspark-notebook:latest
@@ -59,17 +80,28 @@ services:
       JUPYTER_ENABLE_LAB: "yes"
       JUPYTER_TOKEN: "mylake-token-123"
       SPARK_OPTS: "--driver-memory=2g --executor-memory=2g"
+      JUPYTER_URL: "http://207.180.223.160:8888"
+      JUPYTER_CONFIG: |
+        c.NotebookApp.token = 'mylake-token-123'
+        c.NotebookApp.password = ''
+        c.NotebookApp.allow_origin = '*'
+        c.NotebookApp.allow_remote_access = True
+        c.NotebookApp.disable_check_xsrf = True
+        c.NotebookApp.ip = '0.0.0.0'
+        c.NotebookApp.tornado_settings = {
+            'headers': {
+                'Content-Security-Policy': "frame-ancestors * 'self' http://207.180.223.160:5173 http://localhost:5173",
+                'X-Frame-Options': 'ALLOWALL'
+            }
+        }
     ports:
       - "0.0.0.0:8888:8888"
     volumes:
       - jupyter-data:/home/jovyan/work
       - ./notebooks:/home/jovyan/notebooks
-    command: >
-      start-notebook.sh
-      --NotebookApp.token='mylake-token-123'
-      --NotebookApp.password=''
-      --NotebookApp.allow_origin='*'
-      --NotebookApp.disable_check_xsrf=True
+      - ./scripts/jupyter-config.py:/home/jovyan/.jupyter/jupyter_notebook_config.py
+    depends_on:
+      - postgres
 
 volumes:
   postgres-data:

@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Workbench from './pages/Workbench'
+import NotebooksPage from './pages/NotebooksPage'
+import ErrorPage from './pages/ErrorPage'
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
@@ -31,7 +33,9 @@ function App() {
         token ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />
       }>
         <Route index element={<Workbench token={token!} />} />
+        <Route path="/notebooks" element={<NotebooksPage token={token!} />} />
       </Route>
+      <Route path="/error" element={<ErrorPage />} />
     </Routes>
   )
 }
