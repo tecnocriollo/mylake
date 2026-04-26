@@ -53,6 +53,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set())
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set())
   const [notebookType, setNotebookType] = useState<'python' | 'spark'>('python')  // Tipo de notebook
+  const [sparkInitialized, setSparkInitialized] = useState(false)  // Track if Spark is already initialized
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [newNotebookName, setNewNotebookName] = useState('')
   const [showNewNotebookModal, setShowNewNotebookModal] = useState(false)
@@ -231,18 +232,21 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     if (!cell || cell.cell_type !== 'code') return
     
     // Código de inicialización según tipo de notebook
-    const initCode = notebookType === 'spark' ? `
+    // Solo inicializa Spark una vez
+    let initCode = ''
+    if (notebookType === 'spark' && !sparkInitialized) {
+      initCode = `
 # Inicializar SparkSession (auto-generated)
 from pyspark.sql import SparkSession
-if 'spark' not in globals():
-    spark = SparkSession.builder \\
-        .appName("MyLake-PySpark") \\
-        .config("spark.sql.adaptive.enabled", "true") \\
-        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \\
-        .getOrCreate()
-    print(f"Spark Version: {spark.version}")
+spark = SparkSession.builder \\
+    .appName("MyLake-PySpark") \\
+    .config("spark.sql.adaptive.enabled", "true") \\
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \\
+    .getOrCreate()
+print(f"Spark Version: {spark.version}")
 
-` : ''
+`
+    }
     
     const code = initCode + cell.source.join('')
     setExecutingCells(prev => new Set([...prev, cellId]))
@@ -255,6 +259,11 @@ if 'spark' not in globals():
       )
       
       const result = response.data
+      
+      // Marcar Spark como inicializado si fue exitoso
+      if (notebookType === 'spark' && !sparkInitialized && result.success) {
+        setSparkInitialized(true)
+      }
       
       setCells(prev => prev.map(c => {
         if (c.id === cellId) {
