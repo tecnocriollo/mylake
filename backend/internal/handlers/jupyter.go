@@ -577,8 +577,8 @@ func (h *JupyterHandler) ExecuteCellWithPolling(c *gin.Context) {
 		return
 	}
 	
-	// Get or create kernel
-	kernelID, err := h.getOrCreateKernel()
+	// Get or create kernel (default to python3)
+	kernelID, err := h.getOrCreateKernel("python3")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "kernel error: " + err.Error()})
 		return

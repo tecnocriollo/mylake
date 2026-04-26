@@ -297,7 +297,19 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     // Solo inicializa Spark una vez
     let initCode = ''
     if (notebookType === 'spark' && !sparkInitialized) {
-      initCode = `from pyspark.sql import SparkSession\nspark = SparkSession.builder.appName("MyLake").getOrCreate()\nprint("Spark iniciado:", spark.version)\n`
+      initCode = `import sys
+from io import StringIO
+# Capturar stdout
+_old_stdout = sys.stdout
+sys.stdout = StringIO()
+
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("MyLake").getOrCreate()
+
+# Restaurar y mostrar output
+sys.stdout = _old_stdout
+print("Spark iniciado:", spark.version)
+`
     }
     
     const code = initCode + cell.source.join('')
