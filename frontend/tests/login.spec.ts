@@ -16,11 +16,13 @@ test.describe('Login Flow', () => {
     await page.fill('input#password', 'admin123');
     await page.click('button:has-text("Sign in")');
     
-    // Wait for navigation to complete
-    await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 });
+    // Esperar a que el token se guarde en localStorage (indica login exitoso)
+    await page.waitForFunction(() => {
+      return localStorage.getItem('token') !== null;
+    }, { timeout: 10000 });
     
-    // Check we're not on login page anymore
-    expect(page.url()).not.toContain('/login');
+    // Ahora esperar a que el layout principal aparezca
+    await expect(page.locator('nav, header, .layout, button:has-text("Logout")').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show error on invalid credentials', async ({ page }) => {
@@ -30,10 +32,11 @@ test.describe('Login Flow', () => {
     await page.fill('input#password', 'wrongpass');
     await page.click('button:has-text("Sign in")');
     
-    // Error can be any of these
-    await expect(page.locator('text=Invalid, error, or wrong')).toBeVisible({ timeout: 5000 }).catch(() => {
-      // Fallback - just check we're still on login
-      expect(page.url()).toContain('/login');
-    });
+    // Esperar mensaje de error visible
+    const errorMessage = page.locator('.bg-red-50, .text-red-700').first();
+    await expect(errorMessage).toBeVisible({ timeout: 5000 });
+    
+    // Verificar que seguimos en login
+    await expect(page.locator('button:has-text("Sign in")')).toBeVisible();
   });
 });
