@@ -79,12 +79,17 @@ services:
       - backend
 
   jupyter:
-    image: jupyter/pyspark-notebook:latest
+    build:
+      context: ./jupyter
+      dockerfile: Dockerfile
     environment:
       JUPYTER_ENABLE_LAB: "yes"
       JUPYTER_TOKEN: "mylake-token-123"
       SPARK_OPTS: "--driver-memory=2g --executor-memory=2g"
       JUPYTER_URL: "http://207.180.223.160:8888"
+      PYTHONPATH: "/usr/local/spark/python:/opt/conda/lib/python3.11/site-packages"
+      PYSPARK_PYTHON: "/opt/conda/bin/python"
+      PYSPARK_DRIVER_PYTHON: "/opt/conda/bin/python"
       JUPYTER_CONFIG: |
         c.NotebookApp.token = 'mylake-token-123'
         c.NotebookApp.password = ''
