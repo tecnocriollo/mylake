@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Editor from '@monaco-editor/react'
+import CodeMirrorEditor from '../components/CodeMirrorEditor'
 import axios from 'axios'
 import { API_BASE_URL } from '../config'
 import LakeExplorer from '../components/LakeExplorer'
@@ -145,18 +145,12 @@ function Workbench({ token }: WorkbenchProps) {
               </div>
 
               <div id="sql-editor" className="border rounded-lg overflow-hidden flex-shrink-0">
-                <Editor
+                <CodeMirrorEditor
                   height="200px"
-                  defaultLanguage="sql"
+                  language="python"
                   value={query}
-                  onChange={(value) => setQuery(value || '')}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    lineNumbers: 'on',
-                    roundedSelection: false,
-                    scrollBeyondLastLine: false,
-                  }}
+                  onChange={(value: string) => setQuery(value || '')}
+                  options={{ lineNumbers: true }}
                 />
               </div>
 
@@ -253,7 +247,6 @@ function Workbench({ token }: WorkbenchProps) {
                   allow="fullscreen; clipboard-read; clipboard-write"
                   sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
                   loading="lazy"
-                  importance="high"
                 />
               </div>
             </div>

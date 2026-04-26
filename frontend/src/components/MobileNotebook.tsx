@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Editor from '@monaco-editor/react'
+import CodeMirrorEditor from './CodeMirrorEditor'
 import axios from 'axios'
 import { API_BASE_URL } from '../config'
 
@@ -540,7 +540,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
 
       {/* Cells */}
       <div className="flex-1 overflow-auto p-2 space-y-2 pb-20">
-        {cells.map((cell, index) => (
+        {cells.map((cell) => (
           <div
             key={cell.id}
             ref={el => cellRefs.current[cell.id] = el}
@@ -586,19 +586,12 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
               {cell.cell_type === 'markdown' ? (
                 // Markdown cell
                 editingCellId === cell.id ? (
-                  <Editor
+                  <CodeMirrorEditor
                     height="120px"
-                    defaultLanguage="markdown"
+                    language="markdown"
                     value={cell.source.join('')}
                     onChange={(value) => updateCellSource(cell.id, value || '')}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      lineNumbers: 'off',
-                      roundedSelection: false,
-                      scrollBeyondLastLine: false,
-                      wordWrap: 'on',
-                    }}
+                    options={{ lineNumbers: false }}
                   />
                 ) : (
                   <div
@@ -610,19 +603,12 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
                 // Code cell
                 <div>
                   {editingCellId === cell.id ? (
-                    <Editor
+                    <CodeMirrorEditor
                       height="150px"
-                      defaultLanguage="python"
+                      language="python"
                       value={cell.source.join('')}
                       onChange={(value) => updateCellSource(cell.id, value || '')}
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        lineNumbers: 'on',
-                        roundedSelection: false,
-                        scrollBeyondLastLine: false,
-                        wordWrap: 'on',
-                      }}
+                      options={{ lineNumbers: true }}
                     />
                   ) : (
                     <pre className="text-sm bg-gray-50 p-2 rounded overflow-x-auto font-mono text-gray-800">
