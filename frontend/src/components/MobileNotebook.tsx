@@ -296,6 +296,12 @@ if 'spark' not in globals():
     }
   }
 
+  // Estado para mostrar mensaje de inicialización de Spark
+  const isSparkInitializing = (cellId: string) => {
+    const cell = cells.find(c => c.id === cellId)
+    return useSpark && executingCells.has(cellId) && cell?.source?.join('').includes('SparkSession')
+  }
+
   // Toggle output collapse
   const toggleOutput = (cellId: string) => {
     setCollapsedOutputs(prev => {
@@ -590,6 +596,11 @@ if 'spark' not in globals():
                   >
                     {executingCells.has(cell.id) ? '⏳' : '▶ Run'}
                   </button>
+                )}
+                {isSparkInitializing(cell.id) && (
+                  <span className="text-xs text-orange-600 animate-pulse ml-1">
+                    ⚡ Iniciando Spark...
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1">

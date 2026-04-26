@@ -408,8 +408,16 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 	var outputs []Output
 	executionCount := 0
 	done := make(chan bool)
-	timeout := time.AfterFunc(30*time.Second, func() {
-		done <- true
+	// Aumentar timeout para código Spark (puede tardar 60+ segundos en inicializar)
+	timeoutDuration := 90 * time.Second
+	if strings.Contains(req.Code, "SparkSession") || strings.Contains(req.Code, "from pyspark") {
+		timeoutDuration = 120 * time.Second
+	}
+	timeout := time.AfterFunc(timeoutDuration, func() {
+		select {
+		case done <- true:
+		default:
+		}
 	})
 	defer timeout.Stop()
 	
