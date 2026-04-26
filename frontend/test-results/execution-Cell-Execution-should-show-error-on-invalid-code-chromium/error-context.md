@@ -7,7 +7,7 @@
 # Test info
 
 - Name: execution.spec.ts >> Cell Execution >> should show error on invalid code
-- Location: tests/execution.spec.ts:72:3
+- Location: tests/execution.spec.ts:73:3
 
 # Error details
 
@@ -40,104 +40,105 @@ Call log:
 # Test source
 
 ```ts
-  1  | import { test, expect } from '@playwright/test';
-  2  | 
-  3  | test.describe('Cell Execution', () => {
-  4  |   test.setTimeout(120000);
-  5  | 
-  6  |   test.beforeEach(async ({ page }) => {
-  7  |     // Login
-  8  |     await page.goto('/login');
-> 9  |     await page.fill('input#username', 'admin');
-     |                ^ TimeoutError: page.fill: Timeout 30000ms exceeded.
-  10 |     await page.fill('input#password', 'admin123');
-  11 |     await page.click('button:has-text("Sign in")');
-  12 |     
-  13 |     // Wait for token
-  14 |     await page.waitForFunction(() => localStorage.getItem('token') !== null, { timeout: 10000 });
-  15 |   });
-  16 | 
-  17 |   async function createAndOpenNotebook(page: any, name: string) {
-  18 |     await page.goto('/notebooks');
-  19 |     await page.click('button:has-text("+ New")');
-  20 |     await expect(page.locator('text=New Notebook')).toBeVisible();
-  21 |     await page.fill('input[value=""]', name);
-  22 |     await page.click('button:has-text("Create")');
-  23 |     
-  24 |     // Wait for notebook editor to load
-  25 |     // Monaco tarda en cargar, esperamos el contenedor del editor
-  26 |     await page.waitForSelector('.monaco-editor, .monaco-editor-container', { timeout: 15000 });
-  27 |     // Esperar a que el editor esté interactuable
-  28 |     await page.waitForTimeout(3000);
-  29 |   }
-  30 | 
-  31 |   test('should execute a simple code cell', async ({ page }) => {
-  32 |     await createAndOpenNotebook(page, `exec-test-${Date.now()}`);
-  33 |     
-  34 |     // Interactuar con Monaco
-  35 |     const editor = page.locator('.monaco-editor').first();
-  36 |     await editor.click();
-  37 |     await page.keyboard.press('Control+a');
-  38 |     await page.keyboard.type('print("Hello from Playwright!")');
-  39 |     
-  40 |     // Buscar botón de run
-  41 |     const runButton = page.locator('button:has-text("Run"), button[title*="Run"], button:has-text("▶")').first();
-  42 |     await runButton.click();
-  43 |     
-  44 |     // Verificar output
-  45 |     await expect(page.locator('text=Hello from Playwright!')).toBeVisible({ timeout: 20000 });
-  46 |   });
-  47 | 
-  48 |   test('should show print output from code', async ({ page }) => {
-  49 |     await createAndOpenNotebook(page, `print-test-${Date.now()}`);
-  50 |     
-  51 |     const editor = page.locator('.monaco-editor').first();
-  52 |     await editor.click();
-  53 |     await page.keyboard.press('Control+a');
-  54 |     await page.keyboard.type('print(42)');
-  55 |     
-  56 |     await page.click('button:has-text("Run")');
-  57 |     await expect(page.locator('text=42')).toBeVisible({ timeout: 20000 });
-  58 |   });
-  59 | 
-  60 |   test('should show math operation result', async ({ page }) => {
-  61 |     await createAndOpenNotebook(page, `math-test-${Date.now()}`);
-  62 |     
-  63 |     const editor = page.locator('.monaco-editor').first();
-  64 |     await editor.click();
-  65 |     await page.keyboard.press('Control+a');
-  66 |     await page.keyboard.type('2 + 2');
-  67 |     
-  68 |     await page.click('button:has-text("Run")');
-  69 |     await expect(page.locator('text=4')).toBeVisible({ timeout: 20000 });
-  70 |   });
-  71 | 
-  72 |   test('should show error on invalid code', async ({ page }) => {
-  73 |     await createAndOpenNotebook(page, `error-test-${Date.now()}`);
-  74 |     
-  75 |     const editor = page.locator('.monaco-editor').first();
-  76 |     await editor.click();
-  77 |     await page.keyboard.press('Control+a');
-  78 |     await page.keyboard.type('1/0');
-  79 |     
-  80 |     await page.click('button:has-text("Run")');
-  81 |     
-  82 |     // Verificar que aparece algún error
-  83 |     const errorOutput = page.locator('text=ZeroDivisionError, error, Error, or exception');
-  84 |     await expect(errorOutput).toBeVisible({ timeout: 20000 });
-  85 |   });
-  86 | 
-  87 |   test('should execute code on mobile viewport', async ({ page }) => {
-  88 |     await page.setViewportSize({ width: 375, height: 812 });
-  89 |     await createAndOpenNotebook(page, `mobile-exec-${Date.now()}`);
-  90 |     
-  91 |     const editor = page.locator('.monaco-editor').first();
-  92 |     await editor.click();
-  93 |     await page.keyboard.press('Control+a');
-  94 |     await page.keyboard.type('print("mobile")');
-  95 |     
-  96 |     await page.click('button:has-text("Run")');
-  97 |     await expect(page.locator('text=mobile')).toBeVisible({ timeout: 20000 });
-  98 |   });
-  99 | });
+  1   | import { test, expect } from '@playwright/test';
+  2   | 
+  3   | test.describe('Cell Execution', () => {
+  4   |   test.setTimeout(120000);
+  5   | 
+  6   |   test.beforeEach(async ({ page }) => {
+  7   |     // Login
+  8   |     await page.goto('/login');
+> 9   |     await page.fill('input#username', 'admin');
+      |                ^ TimeoutError: page.fill: Timeout 30000ms exceeded.
+  10  |     await page.fill('input#password', 'admin123');
+  11  |     await page.click('button:has-text("Sign in")');
+  12  |     
+  13  |     // Wait for token
+  14  |     await page.waitForFunction(() => localStorage.getItem('token') !== null, { timeout: 10000 });
+  15  |   });
+  16  | 
+  17  |   async function createAndOpenNotebook(page: any, name: string) {
+  18  |     await page.goto('/notebooks');
+  19  |     await page.click('button:has-text("+ New")');
+  20  |     await expect(page.locator('text=New Notebook')).toBeVisible();
+  21  |     await page.fill('input[value=""]', name);
+  22  |     await page.click('button:has-text("Create")');
+  23  |     
+  24  |     // Wait for notebook editor to load
+  25  |     // CodeMirror carga rápido, esperamos el contenedor del editor
+  26  |     await page.waitForSelector('.cm-editor', { timeout: 15000 });
+  27  |     // Esperar a que el editor esté interactuable
+  28  |     await page.waitForTimeout(1000);
+  29  |   }
+  30  | 
+  31  |   test('should execute a simple code cell', async ({ page }) => {
+  32  |     await createAndOpenNotebook(page, `exec-test-${Date.now()}`);
+  33  |     
+  34  |     // Interactuar con CodeMirror
+  35  |     const editor = page.locator('.cm-editor').first();
+  36  |     await editor.click();
+  37  |     // CodeMirror usa contenteditable, seleccionamos todo y escribimos
+  38  |     await page.keyboard.press('Control+a');
+  39  |     await page.keyboard.type('print("Hello from Playwright!")');
+  40  |     
+  41  |     // Buscar botón de run
+  42  |     const runButton = page.locator('button:has-text("Run"), button[title*="Run"], button:has-text("▶")').first();
+  43  |     await runButton.click();
+  44  |     
+  45  |     // Verificar output
+  46  |     await expect(page.locator('text=Hello from Playwright!')).toBeVisible({ timeout: 20000 });
+  47  |   });
+  48  | 
+  49  |   test('should show print output from code', async ({ page }) => {
+  50  |     await createAndOpenNotebook(page, `print-test-${Date.now()}`);
+  51  |     
+  52  |     const editor = page.locator('.cm-editor').first();
+  53  |     await editor.click();
+  54  |     await page.keyboard.press('Control+a');
+  55  |     await page.keyboard.type('print(42)');
+  56  |     
+  57  |     await page.click('button:has-text("Run")');
+  58  |     await expect(page.locator('text=42')).toBeVisible({ timeout: 20000 });
+  59  |   });
+  60  | 
+  61  |   test('should show math operation result', async ({ page }) => {
+  62  |     await createAndOpenNotebook(page, `math-test-${Date.now()}`);
+  63  |     
+  64  |     const editor = page.locator('.cm-editor').first();
+  65  |     await editor.click();
+  66  |     await page.keyboard.press('Control+a');
+  67  |     await page.keyboard.type('2 + 2');
+  68  |     
+  69  |     await page.click('button:has-text("Run")');
+  70  |     await expect(page.locator('text=4')).toBeVisible({ timeout: 20000 });
+  71  |   });
+  72  | 
+  73  |   test('should show error on invalid code', async ({ page }) => {
+  74  |     await createAndOpenNotebook(page, `error-test-${Date.now()}`);
+  75  |     
+  76  |     const editor = page.locator('.cm-editor').first();
+  77  |     await editor.click();
+  78  |     await page.keyboard.press('Control+a');
+  79  |     await page.keyboard.type('1/0');
+  80  |     
+  81  |     await page.click('button:has-text("Run")');
+  82  |     
+  83  |     // Verificar que aparece algún error
+  84  |     const errorOutput = page.locator('text=ZeroDivisionError, error, Error, or exception');
+  85  |     await expect(errorOutput).toBeVisible({ timeout: 20000 });
+  86  |   });
+  87  | 
+  88  |   test('should execute code on mobile viewport', async ({ page }) => {
+  89  |     await page.setViewportSize({ width: 375, height: 812 });
+  90  |     await createAndOpenNotebook(page, `mobile-exec-${Date.now()}`);
+  91  |     
+  92  |     const editor = page.locator('.cm-editor').first();
+  93  |     await editor.click();
+  94  |     await page.keyboard.press('Control+a');
+  95  |     await page.keyboard.type('print("mobile")');
+  96  |     
+  97  |     await page.click('button:has-text("Run")');
+  98  |     await expect(page.locator('text=mobile')).toBeVisible({ timeout: 20000 });
+  99  |   });
+  100 | });
 ```
