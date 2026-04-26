@@ -97,6 +97,12 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       const notebook = response.data
       setCurrentNotebook(notebook)
       
+      // Leer tipo de notebook del metadata
+      const savedType = notebook.metadata?.notebook_type
+      if (savedType === 'spark' || savedType === 'python') {
+        setNotebookType(savedType)
+      }
+      
       // Convert cells to have IDs
       const cellsWithIds = notebook.cells.map((cell: any) => ({
         ...cell,
@@ -128,6 +134,10 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     
     const notebook = {
       ...currentNotebook,
+      metadata: {
+        ...currentNotebook.metadata,
+        notebook_type: notebookType  // Guardar tipo de notebook
+      },
       cells: cells.map(({ id, ...cell }) => ({
         ...cell,
         cell_type: cell.cell_type,
