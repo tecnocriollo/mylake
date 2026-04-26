@@ -15,6 +15,10 @@ RUN echo 'log4j.rootCategory=INFO, file' > /usr/local/spark/conf/log4j.propertie
     echo 'log4j.appender.file.layout=org.apache.log4j.PatternLayout' >> /usr/local/spark/conf/log4j.properties && \
     echo 'log4j.appender.file.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n' >> /usr/local/spark/conf/log4j.properties
 
+# Crear kernel spec para Spark
+RUN mkdir -p /usr/local/share/jupyter/kernels/spark
+COPY spark-kernel.json /usr/local/share/jupyter/kernels/spark/kernel.json
+
 # Asegurar que py4j esté disponible
 ENV PYTHONPATH="/usr/local/spark/python:/opt/conda/lib/python3.11/site-packages:${PYTHONPATH}"
 ENV PYSPARK_PYTHON="/opt/conda/bin/python"

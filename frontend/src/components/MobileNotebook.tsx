@@ -306,7 +306,11 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
     try {
       const response = await axios.post(
         `${API_BASE_URL}/api/jupyter/execute`,
-        { code, cell_id: cellId },
+        { 
+          code, 
+          cell_id: cellId,
+          kernel_type: notebookType === 'spark' ? 'spark' : 'python3'
+        },
         { headers }
       )
       

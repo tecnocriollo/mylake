@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,10 @@ import (
 )
 
 type JupyterHandler struct {
-	BaseURL string
-	Token   string
+	BaseURL   string
+	Token     string
+	kernels   map[string]string // Map of kernel type -> kernel ID
+	kernelMu  sync.RWMutex
 }
 
 func NewJupyterHandler(cfg *config.Config) *JupyterHandler {
@@ -34,6 +37,7 @@ func NewJupyterHandler(cfg *config.Config) *JupyterHandler {
 	return &JupyterHandler{
 		BaseURL: baseURL,
 		Token:   token,
+		kernels: make(map[string]string),
 	}
 }
 
@@ -66,8 +70,9 @@ type Output struct {
 
 // ExecuteRequest represents a cell execution request
 type ExecuteRequest struct {
-	Code   string `json:"code"`
-	CellID string `json:"cell_id"`
+	Code       string `json:"code"`
+	CellID     string `json:"cell_id"`
+	KernelType string `json:"kernel_type,omitempty"`
 }
 
 // ExecuteResponse represents the execution result
@@ -346,8 +351,14 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 		return
 	}
 	
+	// Get kernel type from request (default to python3)
+	kernelType := req.KernelType
+	if kernelType == "" {
+		kernelType = "python3"
+	}
+	
 	// Get or create kernel
-	kernelID, err := h.getOrCreateKernel()
+	kernelID, err := h.getOrCreateKernel(kernelType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create kernel: " + err.Error()})
 		return
@@ -606,7 +617,26 @@ func (h *JupyterHandler) ExecuteCellWithPolling(c *gin.Context) {
 	})
 }
 
-func (h *JupyterHandler) getOrCreateKernel() (string, error) {
+func (h *JupyterHandler) getOrCreateKernel(kernelType string) (string, error) {
+	h.kernelMu.Lock()
+	defer h.kernelMu.Unlock()
+	
+	// Check if we have a cached kernel for this type
+	if kernelID, ok := h.kernels[kernelType]; ok {
+		// Verify kernel still exists
+		url := fmt.Sprintf("%s/api/kernels/%s?token=%s", h.BaseURL, kernelID, h.Token)
+		resp, err := http.Get(url)
+		if err == nil && resp.StatusCode == 200 {
+			resp.Body.Close()
+			return kernelID, nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		// Kernel is dead, remove from cache
+		delete(h.kernels, kernelType)
+	}
+	
 	// List existing kernels
 	url := fmt.Sprintf("%s/api/kernels?token=%s", h.BaseURL, h.Token)
 	resp, err := http.Get(url)
@@ -620,16 +650,20 @@ func (h *JupyterHandler) getOrCreateKernel() (string, error) {
 		return "", err
 	}
 	
-	// Return first available kernel
-	if len(kernels) > 0 {
-		if id, ok := kernels[0]["id"].(string); ok {
-			return id, nil
+	// Look for a kernel of the requested type
+	for _, kernel := range kernels {
+		if name, ok := kernel["name"].(string); ok && name == kernelType {
+			if id, ok := kernel["id"].(string); ok {
+				h.kernels[kernelType] = id
+				return id, nil
+			}
 		}
 	}
 	
-	// Create new kernel
+	// Create new kernel of the requested type
 	createURL := fmt.Sprintf("%s/api/kernels?token=%s", h.BaseURL, h.Token)
-	createResp, err := http.Post(createURL, "application/json", strings.NewReader(`{"name":"python3"}`))
+	createReq := fmt.Sprintf(`{"name":"%s"}`, kernelType)
+	createResp, err := http.Post(createURL, "application/json", strings.NewReader(createReq))
 	if err != nil {
 		return "", err
 	}
@@ -641,6 +675,7 @@ func (h *JupyterHandler) getOrCreateKernel() (string, error) {
 	}
 	
 	if id, ok := newKernel["id"].(string); ok {
+		h.kernels[kernelType] = id
 		return id, nil
 	}
 	
