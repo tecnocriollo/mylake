@@ -432,7 +432,14 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 		default:
 			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 			var msg map[string]interface{}
-			if err := conn.ReadJSON(&msg); err != nil {
+			if err := func() error {
+				defer func() {
+					if r := recover(); r != nil {
+						// Panic recovered from ReadJSON
+					}
+				}()
+				return conn.ReadJSON(&msg)
+			}(); err != nil {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 					c.JSON(http.StatusOK, ExecuteResponse{
 						Success: true,
