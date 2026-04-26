@@ -412,6 +412,11 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 	timeoutDuration := 90 * time.Second
 	if strings.Contains(req.Code, "SparkSession") || strings.Contains(req.Code, "from pyspark") {
 		timeoutDuration = 120 * time.Second
+		// Agregar mensaje inicial de Spark
+		outputs = append(outputs, Output{
+			OutputType: "stream",
+			Text:       []string{"⚡ Iniciando SparkSession..."},
+		})
 	}
 	timeout := time.AfterFunc(timeoutDuration, func() {
 		select {
