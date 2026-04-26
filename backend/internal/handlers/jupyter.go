@@ -107,9 +107,16 @@ func (h *JupyterHandler) proxyToJupyter(method, endpoint string, body []byte) (*
 	return client.Do(req)
 }
 
+func getNotebooksDir() string {
+	if dir := os.Getenv("NOTEBOOKS_DIR"); dir != "" {
+		return dir
+	}
+	return "./notebooks"
+}
+
 // ListNotebooks lists all notebooks in the notebooks directory
 func (h *JupyterHandler) ListNotebooks(c *gin.Context) {
-	notebooksDir := "./notebooks"
+	notebooksDir := getNotebooksDir()
 	
 	entries, err := os.ReadDir(notebooksDir)
 	if err != nil {
@@ -161,7 +168,7 @@ func (h *JupyterHandler) GetNotebook(c *gin.Context) {
 		return
 	}
 	
-	fullPath := filepath.Join(".", path)
+	fullPath := filepath.Join(getNotebooksDir(), path)
 	
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -203,7 +210,7 @@ func (h *JupyterHandler) SaveNotebook(c *gin.Context) {
 	}
 	
 	// Ensure directory exists
-	dir := filepath.Dir(filepath.Join(".", path))
+	dir := filepath.Dir(filepath.Join(getNotebooksDir(), path))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -246,7 +253,7 @@ func (h *JupyterHandler) CreateNotebook(c *gin.Context) {
 		return
 	}
 	
-	path := filepath.Join("./notebooks", name)
+	path := filepath.Join(getNotebooksDir(), name)
 	
 	// Check if exists
 	if _, err := os.Stat(path); err == nil {
@@ -316,7 +323,7 @@ func (h *JupyterHandler) DeleteNotebook(c *gin.Context) {
 		return
 	}
 	
-	fullPath := filepath.Join(".", path)
+	fullPath := filepath.Join(getNotebooksDir(), path)
 	
 	if err := os.Remove(fullPath); err != nil {
 		if os.IsNotExist(err) {
