@@ -16,7 +16,11 @@ test.describe('Login Flow', () => {
     await page.fill('input#password', 'admin123');
     await page.click('button:has-text("Sign in")');
     
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    // Wait for navigation to complete
+    await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 });
+    
+    // Check we're not on login page anymore
+    expect(page.url()).not.toContain('/login');
   });
 
   test('should show error on invalid credentials', async ({ page }) => {

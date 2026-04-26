@@ -239,12 +239,15 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       
       setCells(prev => prev.map(c => {
         if (c.id === cellId) {
+          // Use real outputs from backend, or fallback message
+          const outputs = result.success && result.outputs?.length > 0
+            ? result.outputs
+            : [{ output_type: 'stream', text: ['(no output)'] }]
+            
           return {
             ...c,
             execution_count: (c.execution_count || 0) + 1,
-            outputs: result.success 
-              ? [{ output_type: 'stream', text: ['Cell executed successfully'] }]
-              : [{ output_type: 'error', ename: 'Error', evalue: result.error || 'Unknown error' }]
+            outputs: outputs
           }
         }
         return c

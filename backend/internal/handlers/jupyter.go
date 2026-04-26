@@ -7,13 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"mylake/internal/config"
 )
 
@@ -338,7 +338,7 @@ func (h *JupyterHandler) DeleteNotebook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "notebook deleted"})
 }
 
-// ExecuteCell executes a code cell using Python subprocess via nbconvert
+// ExecuteCell executes a code cell via WebSocket to Jupyter kernel
 func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 	var req ExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -346,97 +346,185 @@ func (h *JupyterHandler) ExecuteCell(c *gin.Context) {
 		return
 	}
 	
-	// Create a temporary notebook with just this cell
-	tempNotebook := Notebook{
-		Metadata: map[string]interface{}{
-			"kernelspec": map[string]string{
-				"display_name": "Python 3",
-				"language":     "python",
-				"name":         "python3",
-			},
-		},
-		NbFormat:      4,
-		NbFormatMinor: 5,
-		Cells: []Cell{
-			{
-				CellType: "code",
-				ID:       uuid.New().String(),
-				Metadata: map[string]interface{}{},
-				Source:   strings.Split(req.Code, "\n"),
-				Outputs:  []Output{},
-			},
-		},
-	}
-	
-	// Write temp notebook
-	tempDir := os.TempDir()
-	tempFile := filepath.Join(tempDir, fmt.Sprintf("exec_%s.ipynb", uuid.New().String()))
-	defer os.Remove(tempFile)
-	
-	data, err := json.Marshal(tempNotebook)
+	// Get or create kernel
+	kernelID, err := h.getOrCreateKernel()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal notebook: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create kernel: " + err.Error()})
 		return
 	}
 	
-	if err := os.WriteFile(tempFile, data, 0644); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write temp file: " + err.Error()})
+	// Build WebSocket URL
+	wsURL := fmt.Sprintf("%s/api/kernels/%s/channels?token=%s", 
+		strings.Replace(h.BaseURL, "http://", "ws://", 1),
+		kernelID, 
+		h.Token)
+	
+	// Connect to kernel WebSocket
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+	}
+	
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to connect to kernel: " + err.Error()})
+		return
+	}
+	defer conn.Close()
+	
+	// Generate unique IDs for the message
+	msgID := uuid.New().String()
+	sessionID := uuid.New().String()
+	username := "mylake"
+	
+	// Build execute request message (Jupyter protocol)
+	executeMsg := map[string]interface{}{
+		"header": map[string]interface{}{
+			"msg_id":   msgID,
+			"username": username,
+			"session":  sessionID,
+			"msg_type": "execute_request",
+			"version":  "5.3",
+		},
+		"parent_header": map[string]interface{}{},
+		"metadata":      map[string]interface{}{},
+		"content": map[string]interface{}{
+			"code":             req.Code,
+			"silent":           false,
+			"store_history":    true,
+			"user_expressions": map[string]interface{}{},
+			"allow_stdin":      false,
+			"stop_on_error":    true,
+		},
+		"channel": "shell",
+	}
+	
+	// Send execute request
+	if err := conn.WriteJSON(executeMsg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send execute request: " + err.Error()})
 		return
 	}
 	
-	// Execute using nbconvert
-	cmd := exec.Command("python3", "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute",
-		"--ExecutePreprocessor.timeout=30",
-		"--output", tempFile,
-		tempFile)
+	// Collect outputs
+	var outputs []Output
+	executionCount := 0
+	done := make(chan bool)
+	timeout := time.AfterFunc(30*time.Second, func() {
+		done <- true
+	})
+	defer timeout.Stop()
 	
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	
-	err = cmd.Run()
-	if err != nil {
-		// Even if command fails, check if output was generated
-		if stderr.Len() > 0 {
+	for {
+		select {
+		case <-done:
 			c.JSON(http.StatusOK, ExecuteResponse{
-				Success: false,
-				Outputs: []Output{
-					{
-						OutputType: "error",
-						Ename:      "ExecutionError",
-						Evalue:     stderr.String(),
-					},
-				},
+				Success: true,
+				Outputs: outputs,
 			})
 			return
+		default:
+			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			var msg map[string]interface{}
+			if err := conn.ReadJSON(&msg); err != nil {
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					c.JSON(http.StatusOK, ExecuteResponse{
+						Success: true,
+						Outputs: outputs,
+					})
+					return
+				}
+				// Timeout, check if we have outputs
+				if len(outputs) > 0 {
+					c.JSON(http.StatusOK, ExecuteResponse{
+						Success: true,
+						Outputs: outputs,
+					})
+					return
+				}
+				continue
+			}
+			
+			msgType, _ := msg["msg_type"].(string)
+			
+			switch msgType {
+			case "stream":
+				content, _ := msg["content"].(map[string]interface{})
+				text, _ := content["text"].(string)
+				name, _ := content["name"].(string)
+				outputs = append(outputs, Output{
+					OutputType: name, // "stdout" or "stderr"
+					Text:       strings.Split(text, "\n"),
+				})
+				
+			case "execute_result":
+				content, _ := msg["content"].(map[string]interface{})
+				data, _ := content["data"].(map[string]interface{})
+				execCount, _ := content["execution_count"].(float64)
+				executionCount = int(execCount)
+				
+				output := Output{
+					OutputType:     "execute_result",
+					ExecutionCount: &executionCount,
+					Data:           data,
+				}
+				
+				// Also add text representation
+				if textData, ok := data["text/plain"]; ok {
+					switch v := textData.(type) {
+					case string:
+						output.Text = strings.Split(v, "\n")
+					case []interface{}:
+						var texts []string
+						for _, t := range v {
+							if s, ok := t.(string); ok {
+								texts = append(texts, s)
+							}
+						}
+						output.Text = texts
+					}
+				}
+				outputs = append(outputs, output)
+				
+			case "error":
+				content, _ := msg["content"].(map[string]interface{})
+				ename, _ := content["ename"].(string)
+				evalue, _ := content["evalue"].(string)
+				traceback, _ := content["traceback"].([]interface{})
+				
+				var tb []string
+				for _, t := range traceback {
+					if s, ok := t.(string); ok {
+						tb = append(tb, s)
+					}
+				}
+				
+				outputs = append(outputs, Output{
+					OutputType: "error",
+					Ename:      ename,
+					Evalue:     evalue,
+					Traceback:  tb,
+				})
+				
+			case "execute_reply":
+				content, _ := msg["content"].(map[string]interface{})
+				status, _ := content["status"].(string)
+				
+				if status == "error" {
+					// Error already handled above
+				} else if status == "ok" && len(outputs) == 0 {
+					// No output but success
+					outputs = append(outputs, Output{
+						OutputType: "stream",
+						Text:       []string{""},
+					})
+				}
+				
+				c.JSON(http.StatusOK, ExecuteResponse{
+					Success: status == "ok",
+					Outputs: outputs,
+				})
+				return
+			}
 		}
-	}
-	
-	// Read the executed notebook
-	outputData, err := os.ReadFile(tempFile)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read output: " + err.Error()})
-		return
-	}
-	
-	var executedNotebook Notebook
-	if err := json.Unmarshal(outputData, &executedNotebook); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse output: " + err.Error()})
-		return
-	}
-	
-	// Extract outputs from the cell
-	if len(executedNotebook.Cells) > 0 {
-		cell := executedNotebook.Cells[0]
-		c.JSON(http.StatusOK, ExecuteResponse{
-			Success: true,
-			Outputs: cell.Outputs,
-		})
-	} else {
-		c.JSON(http.StatusOK, ExecuteResponse{
-			Success: true,
-			Outputs: []Output{},
-		})
 	}
 }
 
