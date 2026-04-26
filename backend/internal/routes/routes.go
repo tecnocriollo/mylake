@@ -23,5 +23,10 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 	{
 		queryHandler := handlers.NewQueryHandler(db)
 		protected.POST("/query", queryHandler.Execute)
+
+		// Lake endpoints
+		lakeHandler := handlers.NewLakeHandler(db)
+		protected.GET("/lake/schemas", lakeHandler.ListSchemas)
+		protected.GET("/lake/files", lakeHandler.ListFiles)
 	}
 }
