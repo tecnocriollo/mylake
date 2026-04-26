@@ -28,5 +28,7 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 		lakeHandler := handlers.NewLakeHandler(db)
 		protected.GET("/lake/schemas", lakeHandler.ListSchemas)
 		protected.GET("/lake/files", lakeHandler.ListFiles)
+		protected.POST("/lake/files/create", lakeHandler.CreateFile)
+		protected.DELETE("/lake/files", lakeHandler.DeleteFile)
 	}
 }

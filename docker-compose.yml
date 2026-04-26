@@ -38,7 +38,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # No volume mount for backend - use built image
+    volumes:
+      - jupyter-data:/home/jovyan/work
 
   frontend:
     image: node:20-alpine
