@@ -38,16 +38,8 @@ function Layout({ onLogout }: LayoutProps) {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                📱 Mobile NB
+                📓 Notebooks
               </Link>
-              <a
-                href="http://207.180.223.160:8888"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-2 rounded-md text-sm font-medium text-purple-600 hover:text-purple-800 hover:bg-purple-50"
-              >
-                Jupyter ↗
-              </a>
               <button
                 onClick={onLogout}
                 className="px-3 py-2 rounded-md text-sm font-medium text-red-600 hover:text-red-800"
@@ -95,17 +87,8 @@ function Layout({ onLogout }: LayoutProps) {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                📱 Mobile Notebooks
+                📓 Notebooks
               </Link>
-              <a
-                href="http://207.180.223.160:8888"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-md text-base font-medium text-purple-600 hover:text-purple-800"
-              >
-                🐍 Jupyter ↗
-              </a>
               <button
                 onClick={() => {
                   setMobileMenuOpen(false)

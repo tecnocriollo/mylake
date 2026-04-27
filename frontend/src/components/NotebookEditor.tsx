@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CodeMirrorEditor from './CodeMirrorEditor'
+import AICellAssistant from './AICellAssistant'
 import axios from 'axios'
 import { API_BASE_URL } from '../config'
 
-interface MobileNotebookProps {
+// Logger que envía logs al servidor
+const serverLog = async (token: string, message: string, data?: any) => {
+  try {
+    await axios.post(
+      `${API_BASE_URL}/api/errors`,
+      {
+        message,
+        stack: data ? JSON.stringify(data, null, 2) : undefined,
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+  } catch (e: any) {
+    console.error('Failed to send log:', e.message)
+  }
+}
+
+interface NotebookEditorProps {
   token: string
   notebookPath?: string
 }
@@ -42,7 +62,7 @@ interface NotebookInfo {
   created: string
 }
 
-export default function MobileNotebook({ token, notebookPath }: MobileNotebookProps) {
+export default function NotebookEditor({ token, notebookPath }: NotebookEditorProps) {
   const navigate = useNavigate()
   const [notebooks, setNotebooks] = useState<NotebookInfo[]>([])
   const [currentNotebook, setCurrentNotebook] = useState<Notebook | null>(null)
@@ -59,6 +79,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Load kernel info on mount
   useEffect(() => {
     getActiveKernel()
+    serverLog(token, 'NotebookEditor mounted', { url: window.location.href })
   }, [])
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [newNotebookName, setNewNotebookName] = useState('')
@@ -66,7 +87,8 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null)
-  
+  const [selectedCellId, setSelectedCellId] = useState<string | undefined>(undefined)
+
   const cellRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const headers = { Authorization: `Bearer ${token}` }
@@ -82,8 +104,6 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       setError(errorMsg)
       if (err.response?.status === 401) {
         setError('Session expired. Please login again.')
-        // Optionally redirect to login
-        // window.location.href = '/login'
       }
     }
   }, [token])
@@ -91,25 +111,25 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Load specific notebook
   const loadNotebook = useCallback(async (path: string) => {
     if (!path) return
-    
+
     try {
       const response = await axios.get(`${API_BASE_URL}/api/jupyter/notebooks/${encodeURIComponent(path)}`, { headers })
       const notebook = response.data
       setCurrentNotebook(notebook)
-      
+
       // Leer tipo de notebook del metadata
       const savedType = notebook.metadata?.notebook_type
       if (savedType === 'spark' || savedType === 'python') {
         setNotebookType(savedType)
       }
-      
+
       // Convert cells to have IDs
       const cellsWithIds = notebook.cells.map((cell: any) => ({
         ...cell,
         id: cell.id || `cell-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         source: Array.isArray(cell.source) ? cell.source : [cell.source]
       }))
-      
+
       setCells(cellsWithIds)
       setCurrentPath(path)
       setError('')
@@ -131,7 +151,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Auto-save on cell changes
   const saveNotebook = async () => {
     if (!currentPath || !currentNotebook) return
-    
+
     const notebook = {
       ...currentNotebook,
       metadata: {
@@ -147,7 +167,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
         metadata: cell.metadata
       }))
     }
-    
+
     try {
       await axios.put(
         `${API_BASE_URL}/api/jupyter/notebooks/${encodeURIComponent(currentPath)}`,
@@ -164,7 +184,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Create new notebook
   const createNotebook = async () => {
     if (!newNotebookName.trim()) return
-    
+
     try {
       await axios.post(
         `${API_BASE_URL}/api/jupyter/notebooks`,
@@ -184,7 +204,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Delete notebook
   const deleteNotebook = async (path: string) => {
     if (!confirm('Delete this notebook?')) return
-    
+
     try {
       await axios.delete(
         `${API_BASE_URL}/api/jupyter/notebooks/${encodeURIComponent(path)}`,
@@ -227,7 +247,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   // Restart kernel
   const restartKernel = async () => {
     if (!confirm('Restart kernel? All variables will be lost.')) return
-    
+
     try {
       // Get current kernel
       const currentKernel = await getActiveKernel()
@@ -258,7 +278,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       outputs: [],
       metadata: {}
     }
-    
+
     setCells(prev => {
       if (afterId) {
         const index = prev.findIndex(c => c.id === afterId)
@@ -268,7 +288,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
       }
       return [...prev, newCell]
     })
-    
+
     setEditingCellId(newCell.id)
     setActiveCellId(newCell.id)
   }
@@ -283,7 +303,7 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
 
   // Update cell content
   const updateCellSource = (cellId: string, newSource: string) => {
-    setCells(prev => prev.map(c => 
+    setCells(prev => prev.map(c =>
       c.id === cellId ? { ...c, source: [newSource] } : c
     ))
   }
@@ -292,54 +312,44 @@ export default function MobileNotebook({ token, notebookPath }: MobileNotebookPr
   const executeCell = async (cellId: string) => {
     const cell = cells.find(c => c.id === cellId)
     if (!cell || cell.cell_type !== 'code') return
-    
-    // Código de inicialización según tipo de notebook
-    // Solo inicializa Spark una vez
-    let initCode = ''
-    if (notebookType === 'spark' && !sparkInitialized) {
-      initCode = `import sys
-from io import StringIO
-# Capturar stdout
-_old_stdout = sys.stdout
-sys.stdout = StringIO()
 
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.appName("MyLake").getOrCreate()
-
-# Restaurar y mostrar output
-sys.stdout = _old_stdout
-print("Spark iniciado:", spark.version)
-`
-    }
-    
-    const code = initCode + cell.source.join('')
     setExecutingCells(prev => new Set([...prev, cellId]))
-    
+
     try {
+      await serverLog(token, 'Starting cell execution', { cellId, code: cell.source.join('').slice(0, 100) })
+
+      // Usar marimo para Python, Spark Connect para Spark
+      const endpoint = notebookType === 'spark'
+        ? `${API_BASE_URL}/api/spark-connect/execute`
+        : `${API_BASE_URL}/api/marimo/execute`
+
       const response = await axios.post(
-        `${API_BASE_URL}/api/jupyter/execute`,
-        { 
-          code, 
-          cell_id: cellId,
-          kernel_type: notebookType === 'spark' ? 'spark' : 'python3'
-        },
+        endpoint,
+        { code: cell.source.join('') },
         { headers }
       )
-      
+
       const result = response.data
-      
+      await serverLog(token, 'Execute result', result)
+
       // Marcar Spark como inicializado si fue exitoso
       if (notebookType === 'spark' && !sparkInitialized && result.success) {
         setSparkInitialized(true)
       }
-      
+
       setCells(prev => prev.map(c => {
         if (c.id === cellId) {
-          // Use real outputs from backend, or fallback message
-          const outputs = result.success && result.outputs?.length > 0
-            ? result.outputs
-            : [{ output_type: 'stream', text: ['(no output)'] }]
-            
+          // Formatear outputs según el tipo de respuesta
+          let outputs: any[]
+
+          if (result.outputs?.length > 0) {
+            outputs = [{ output_type: 'stream', text: result.outputs }]
+          } else if (result.error) {
+            outputs = [{ output_type: 'error', text: [result.error] }]
+          } else {
+            outputs = [{ output_type: 'stream', text: ['(no output)'] }]
+          }
+
           return {
             ...c,
             execution_count: (c.execution_count || 0) + 1,
@@ -348,7 +358,7 @@ print("Spark iniciado:", spark.version)
         }
         return c
       }))
-      
+
       setCollapsedOutputs(prev => {
         const newSet = new Set(prev)
         newSet.delete(cellId)
@@ -402,10 +412,10 @@ print("Spark iniciado:", spark.version)
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (swipeStartX === null) return
-    
+
     const swipeEndX = e.changedTouches[0].clientX
     const diff = swipeStartX - swipeEndX
-    
+
     // Swipe left/right to navigate cells
     if (Math.abs(diff) > 50) {
       const currentIndex = cells.findIndex(c => c.id === activeCellId)
@@ -419,7 +429,7 @@ print("Spark iniciado:", spark.version)
         cellRefs.current[cells[currentIndex - 1].id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     }
-    
+
     setSwipeStartX(null)
   }
 
@@ -448,7 +458,7 @@ print("Spark iniciado:", spark.version)
       case 'display_data':
       case 'execute_result':
         if (output.data?.['text/plain']) {
-          return Array.isArray(output.data['text/plain']) 
+          return Array.isArray(output.data['text/plain'])
             ? output.data['text/plain'].join('')
             : String(output.data['text/plain'])
         }
@@ -469,7 +479,7 @@ print("Spark iniciado:", spark.version)
       <div className="h-full flex flex-col bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-          <h1 className="text-lg font-bold text-gray-900">📱 Mobile Notebooks</h1>
+          <h1 className="text-lg font-bold text-gray-900">📓 Notebooks</h1>
           <button
             onClick={() => setShowNewNotebookModal(true)}
             className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium"
@@ -566,7 +576,7 @@ print("Spark iniciado:", spark.version)
 
   // Notebook editor view
   return (
-    <div 
+    <div
       className="h-full flex flex-col bg-gray-50"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -725,6 +735,19 @@ print("Spark iniciado:", spark.version)
                   {editingCellId === cell.id ? '👁️ View' : '✏️ Edit'}
                 </button>
                 <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedCellId(cell.id)
+                    // Abrir el chat AI
+                    const aiButton = document.querySelector('[data-ai-button="true"]') as HTMLButtonElement
+                    if (aiButton) aiButton.click()
+                  }}
+                  className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 hover:bg-purple-200 rounded"
+                  title="🤖 AI Assistant"
+                >
+                  🤖
+                </button>
+                <button
                   onClick={() => deleteCell(cell.id)}
                   className="text-xs text-red-500 px-2 py-0.5 hover:bg-red-50 rounded"
                 >
@@ -870,6 +893,49 @@ print("Spark iniciado:", spark.version)
           {cells.length} cell{cells.length !== 1 ? 's' : ''}
         </div>
       </div>
+
+      {/* AI Assistant */}
+      <AICellAssistant
+        token={token}
+        cells={cells}
+        onAction={(action) => {
+          if (action.type === 'add_cell') {
+            const newCell: Cell = {
+              id: `cell-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              cell_type: (action.cell_type || 'code') as 'code' | 'markdown',
+              source: action.code ? [action.code] : [''],
+              outputs: [],
+              metadata: {}
+            }
+            setCells(prev => [...prev, newCell])
+            setEditingCellId(newCell.id)
+          } else if (action.type === 'modify' && selectedCellId) {
+            // Modificar celda existente
+            setCells(prev => prev.map(cell => {
+              if (cell.id === selectedCellId) {
+                return {
+                  ...cell,
+                  source: action.code ? [action.code] : cell.source,
+                  cell_type: (action.cell_type || cell.cell_type) as 'code' | 'markdown'
+                }
+              }
+              return cell
+            }))
+            setSuccess('✅ Celda modificada por AI')
+          } else if (action.type === 'explain') {
+            // Agregar celda markdown con explicación
+            const newCell: Cell = {
+              id: `cell-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              cell_type: 'markdown',
+              source: action.code ? [action.code] : ['## Explicación\n\n...'],
+              outputs: [],
+              metadata: {}
+            }
+            setCells(prev => [...prev, newCell])
+          }
+        }}
+        selectedCellId={selectedCellId}
+      />
     </div>
   )
 }

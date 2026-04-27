@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Workbench from './pages/Workbench'
-import NotebooksPage from './pages/NotebooksPage'
-import NotebookEditor from './pages/NotebookEditor'
+import NotebooksList from './pages/NotebooksList'
+import NotebookPage from './pages/NotebookPage'
 import ErrorPage from './pages/ErrorPage'
 
 function App() {
@@ -34,8 +34,8 @@ function App() {
         token ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />
       }>
         <Route index element={<Workbench token={token!} />} />
-        <Route path="/notebooks" element={<NotebooksPage token={token!} />} />
-        <Route path="/notebook/:path" element={<NotebookEditor token={token!} />} />
+        <Route path="/notebooks" element={<NotebooksList token={token!} />} />
+        <Route path="/notebook/:path" element={<NotebookPage token={token!} />} />
       </Route>
       <Route path="/error" element={<ErrorPage />} />
     </Routes>

@@ -9,12 +9,10 @@ interface WorkbenchProps {
 }
 
 function Workbench({ token }: WorkbenchProps) {
-  const [activeTab, setActiveTab] = useState<'sql' | 'jupyter'>('sql')
   const [query, setQuery] = useState('SELECT * FROM auth_mgmt.users LIMIT 10;')
   const [results, setResults] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [jupyterUrl, setJupyterUrl] = useState(`http://207.180.223.160:8888/lab/workspaces/lake?token=mylake-token-123`)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const executeQuery = async () => {
@@ -39,7 +37,6 @@ function Workbench({ token }: WorkbenchProps) {
   const handleSelectTable = (schema: string, table: string) => {
     const newQuery = `SELECT * FROM ${schema}.${table} LIMIT 100;`
     setQuery(newQuery)
-    setActiveTab('sql')
     setSidebarOpen(false) // Close sidebar on mobile after selection
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -47,14 +44,8 @@ function Workbench({ token }: WorkbenchProps) {
   const handleCreateTable = (schema: string, template: string) => {
     const newQuery = `-- Crear tabla en esquema: ${schema}\n${template}`
     setQuery(newQuery)
-    setActiveTab('sql')
     setSidebarOpen(false)
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const handleSelectFile = (path: string) => {
-    const notebookUrl = `http://207.180.223.160:8888/lab/workspaces/lake/tree/${path}?token=mylake-token-123`
-    setJupyterUrl(notebookUrl)
   }
 
   return (
@@ -83,7 +74,7 @@ function Workbench({ token }: WorkbenchProps) {
           className={`${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           } transform transition-transform duration-300 ease-in-out
-            w-72 h-full lg:h-auto bg-white lg:bg-transparent shadow-2xl lg:shadow-none 
+            w-72 h-full lg:h-auto bg-white lg:bg-transparent shadow-2xl lg:shadow-none
             border-r lg:border-0 overflow-auto`}
         >
           <div className="p-4 lg:p-0">
@@ -100,7 +91,6 @@ function Workbench({ token }: WorkbenchProps) {
             <LakeExplorer
               token={token}
               onSelectTable={handleSelectTable}
-              onSelectFile={handleSelectFile}
               onCreateTable={handleCreateTable}
             />
           </div>
@@ -109,148 +99,88 @@ function Workbench({ token }: WorkbenchProps) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* Tabs */}
-        <div className="bg-white rounded-t-lg shadow border-b border-gray-200 flex-shrink-0">
-          <div className="flex">
-            <button
-              onClick={() => setActiveTab('sql')}
-              className={`px-4 lg:px-6 py-3 text-sm font-medium border-b-2 ${
-                activeTab === 'sql'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📝 SQL
-            </button>
-            <button
-              onClick={() => setActiveTab('jupyter')}
-              className={`px-4 lg:px-6 py-3 text-sm font-medium border-b-2 ${
-                activeTab === 'jupyter'
-                  ? 'border-purple-500 text-purple-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              🐍 Jupyter
-            </button>
-          </div>
-        </div>
+        <div className="bg-white rounded-lg shadow flex-1 overflow-hidden">
+          <div className="h-full flex flex-col p-4 space-y-4">
+            <div>
+              <h2 className="text-lg font-medium text-gray-900">SQL Workbench</h2>
+              <p className="text-sm text-gray-500">Escribe y ejecuta consultas SQL</p>
+            </div>
 
-        {/* Tab Content */}
-        <div className="bg-white rounded-b-lg shadow flex-1 overflow-hidden">
-          {activeTab === 'sql' ? (
-            <div className="h-full flex flex-col p-4 space-y-4">
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">SQL Workbench</h2>
-                <p className="text-sm text-gray-500">Escribe y ejecuta consultas SQL</p>
+            <div id="sql-editor" className="border rounded-lg overflow-hidden flex-shrink-0">
+              <CodeMirrorEditor
+                height="200px"
+                language="python"
+                value={query}
+                onChange={(value: string) => setQuery(value || '')}
+                options={{ lineNumbers: true }}
+              />
+            </div>
+
+            <div className="flex items-center space-x-4 flex-shrink-0">
+              <button
+                onClick={executeQuery}
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Ejecutando...' : '▶ Ejecutar'}
+              </button>
+
+              <button
+                onClick={() => setQuery('')}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              >
+                Limpiar
+              </button>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex-shrink-0">
+                {error}
               </div>
+            )}
 
-              <div id="sql-editor" className="border rounded-lg overflow-hidden flex-shrink-0">
-                <CodeMirrorEditor
-                  height="200px"
-                  language="python"
-                  value={query}
-                  onChange={(value: string) => setQuery(value || '')}
-                  options={{ lineNumbers: true }}
-                />
-              </div>
-
-              <div className="flex items-center space-x-4 flex-shrink-0">
-                <button
-                  onClick={executeQuery}
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Ejecutando...' : '▶ Ejecutar'}
-                </button>
-
-                <button
-                  onClick={() => setQuery('')}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                >
-                  Limpiar
-                </button>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex-shrink-0">
-                  {error}
+            {results && results.columns && results.rows && (
+              <div className="border rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
+                <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+                  <span className="text-sm text-gray-600">
+                    {results.count} fila{results.count !== 1 ? 's' : ''}
+                  </span>
                 </div>
-              )}
 
-              {results && results.columns && results.rows && (
-                <div className="border rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
-                  <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-                    <span className="text-sm text-gray-600">
-                      {results.count} fila{results.count !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-
-                  <div className="overflow-auto flex-1">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
+                <div className="overflow-auto flex-1">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        {results.columns.map((col: string) => (
+                          <th
+                            key={col}
+                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {results.rows.map((row: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-gray-50">
                           {results.columns.map((col: string) => (
-                            <th
-                              key={col}
-                              className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                            >
-                              {col}
-                            </th>
+                            <td key={col} className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                              {row[col] === null ? (
+                                <span className="text-gray-400">NULL</span>
+                              ) : (
+                                String(row[col])
+                              )}
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {results.rows.map((row: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            {results.columns.map((col: string) => (
-                              <td key={col} className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                                {row[col] === null ? (
-                                  <span className="text-gray-400">NULL</span>
-                                ) : (
-                                  String(row[col])
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col">
-              <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                <div>
-                  <span className="font-medium text-gray-900">Jupyter Lab</span>
-                  <span className="text-sm text-gray-500 ml-2">- Python + PySpark</span>
-                </div>
-                <a
-                  href={jupyterUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-purple-600 hover:text-purple-800 underline"
-                >
-                  Abrir en nueva pestaña ↗
-                </a>
               </div>
-              <div className="flex-1 relative">
-                {/* Mobile warning */}
-                <div className="lg:hidden absolute top-0 left-0 right-0 bg-yellow-50 border-b border-yellow-200 p-2 text-xs text-yellow-800 text-center z-10">
-                  📱 En móvil, usa "Abrir en nueva pestaña" para mejor experiencia
-                </div>
-                <iframe
-                  src={jupyterUrl}
-                  className="w-full h-full border-0"
-                  title="Jupyter Lab"
-                  allow="fullscreen; clipboard-read; clipboard-write"
-                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
-                  loading="lazy"
-                />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
