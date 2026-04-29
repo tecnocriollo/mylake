@@ -1,45 +1,53 @@
 # 🗃️ MyLake
 
-Your personal lakehouse for local development. PostgreSQL + RustFS + DuckDB + Go + React.
+Personal lakehouse for local development. Run SQL queries, Python notebooks, and PySpark jobs — all from a mobile-first web UI.
 
 ## 🚀 Stack
 
 | Layer | Technology |
-|------|------------|
+|-------|------------|
 | **Database** | PostgreSQL 16+ |
 | **Storage** | RustFS (S3-compatible) |
 | **Backend** | Go + Gin + JWT |
 | **Frontend** | React + TypeScript + Vite + TailwindCSS |
-| **SQL Editor** | Monaco Editor |
-| **Notebooks** | Jupyter Lab + PySpark |
+| **SQL Editor** | CodeMirror 6 |
+| **Notebooks** | Custom editor (.ipynb) — Python + PySpark |
+| **Python Kernel** | Persistent REPL (Marimo environment) |
+| **Spark Kernel** | Persistent PySpark REPL (Spark local mode) |
+| **AI Assistant** | Ollama Cloud API |
 | **Orchestration** | Docker Compose |
 
 ## 📁 Structure
 
 ```
 mylake/
-├── docker-compose.yml          # Full stack
+├── docker-compose.yml
 ├── backend/                    # Go API (Gin + pgx)
 │   ├── main.go
-│   ├── internal/
-│   │   ├── auth/              # JWT middleware
-│   │   ├── handlers/          # HTTP handlers
-│   │   └── routes/            # API routes
-│   └── Dockerfile
+│   └── internal/
+│       ├── auth/               # JWT middleware
+│       ├── handlers/
+│       │   ├── ai.go           # Ollama Cloud chat
+│       │   ├── marimo.go       # Persistent Python REPL kernel
+│       │   ├── sparkconnect.go # Persistent PySpark REPL kernel
+│       │   ├── jupyter.go      # Notebook file I/O
+│       │   └── ...
+│       └── routes/
 ├── frontend/                   # React + Vite
-│   ├── src/
-│   │   ├── pages/             # Login, Workbench
-│   │   ├── components/        # Layout, LakeExplorer
-│   │   └── api/               # HTTP client
-│   └── package.json
-├── notebooks/                  # Jupyter notebooks
+│   └── src/
+│       ├── pages/
+│       └── components/
+│           ├── NotebookEditor.tsx   # Main notebook UI
+│           ├── AICellAssistant.tsx  # AI chat panel
+│           └── CodeMirrorEditor.tsx
+├── marimo/                     # Python environment container
+├── spark/                      # Spark local mode container
+├── notebooks/                  # Persisted .ipynb files
 └── scripts/
-    └── init-schemas.sql        # Initial schemas
+    └── init-schemas.sql
 ```
 
 ## 🏁 Quick Start
-
-### 1. Clone and launch
 
 ```bash
 git clone https://github.com/tecnocriollo/mylake.git
@@ -47,121 +55,76 @@ cd mylake
 docker compose up -d
 ```
 
-### 2. Verify services
-
-```bash
-docker compose ps
-```
-
-### 3. Access
+### Access
 
 | Service | URL |
-|----------|-----|
+|---------|-----|
 | **Frontend** | http://localhost:5173 |
 | **Backend API** | http://localhost:8080 |
-| **Jupyter Lab** | http://localhost:8888 (token: `mylake-token-123`) |
 | **RustFS** | http://localhost:9001 |
 
-### 4. Local PostgreSQL
+### PostgreSQL
 
 ```bash
-# Connect
 psql -h localhost -p 5433 -U admin -d mylake
-
-# Or via Docker
-docker compose exec postgres psql -U admin -d mylake -c "\dn"
+# password: change-me-locally
 ```
-
-Default credentials:
-- User: `admin`
-- Password: `change-me-locally`
 
 ## ✨ Features
 
-### 🔐 JWT Authentication
-- User registration and login
-- JWT tokens with expiration
-- Protected route middleware
+### 🔐 Authentication
+- JWT registration and login
+- Protected API middleware
 
 ### 🗄️ SQL Workbench
-- Monaco Editor with SQL syntax
-- Protected query execution
-- Paginated table results
-- Schema and table catalog
-- **"Create Table" button** to generate SQL templates
+- CodeMirror 6 with SQL syntax highlighting
+- Schema and table catalog browser
+- Paginated query results
 
-### 📊 Catalog
-- PostgreSQL schema explorer
-- Table and view listing
-- Quick SELECT on click
-- Hover for advanced options
+### 📓 Notebooks
+- `.ipynb` format (compatible with Jupyter)
+- **Python mode** — persistent REPL kernel, variables shared across cells
+- **Spark mode** — persistent PySpark REPL with local Spark session
+- Sequential execution counters (`[1]`, `[2]`, ...)
+- Kernel restart per mode
+- Save / share URL
 
-### 🐍 Jupyter Lab
-- Python + PySpark included
-- Persistent notebooks in `./notebooks`
-- Lakehouse integration
+### 🤖 AI Assistant
+- Chat panel per notebook (🤖 button)
+- Powered by Ollama Cloud (`kimi-k2.6:cloud` default)
+- Actions: add cell, modify cell, explain, run
+- Model selector (Qwen, DeepSeek, Gemma, ...)
 
 ### 📁 File Management
-- Create folders, Python scripts, and notebooks
-- File explorer in sidebar
-- Jupyter integration
-
-## 🛠️ Development
-
-### Backend (Go)
-
-```bash
-cd backend
-go mod tidy
-go run main.go
-```
-
-### Frontend (React)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Environment Variables
-
-Copy and adjust:
-```bash
-cp backend/.env.example backend/.env
-```
+- Create and delete notebooks
+- Persistent storage in `./notebooks`
 
 ## 🔧 Useful Commands
 
 ```bash
-# View logs
+# Logs
 docker compose logs -f backend
 docker compose logs -f frontend
 
-# Rebuild backend
+# Rebuild backend after code changes
 docker compose up -d --build backend
 
-# Restart everything
+# Restart all
 docker compose restart
 
-# Complete reset (⚠️ deletes data)
-docker compose down -v
-docker compose up -d
+# Full reset (⚠️ deletes data)
+docker compose down -v && docker compose up -d
 ```
 
-## 🔒 Security
+## 🔒 Security Notes
 
-- JWT secret: change in production (`JWT_SECRET`)
-- PostgreSQL: change password (`POSTGRES_PASSWORD`)
-- RustFS: rotate access keys (`RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`)
-- Jupyter: use secure token in production
+Change these before any non-local deployment:
 
-## 📝 TODO
-
-- [ ] DuckDB integration for analytical queries
-- [ ] RustFS table viewer
-- [ ] Export results to CSV/Parquet
-- [ ] OAuth authentication (GitHub, Google)
+| Variable | Location |
+|----------|----------|
+| `JWT_SECRET` | `docker-compose.yml` → backend |
+| `POSTGRES_PASSWORD` | `docker-compose.yml` → postgres |
+| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | `docker-compose.yml` → rustfs |
 
 ## 👤 Author
 
@@ -169,4 +132,4 @@ docker compose up -d
 
 ---
 
-*Built with ❤️ for local data pipeline development.*
+*Built for local data pipeline development.*
