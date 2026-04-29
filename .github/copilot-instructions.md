@@ -1,29 +1,35 @@
-<!-- unforget: auto-generated - do not edit this block manually -->
+<!-- unforget: auto-generated — do not edit this block manually -->
 ## Project Context
 
-**Project:** MyLake - production-like personal lakehouse platform for Kubernetes/k3s.
+**Project:** MyLake — personal lakehouse for local development (SQL + Python/PySpark notebooks + AI assistant)
 
-**Stack:** PostgreSQL 16+, RustFS, DuckLake, DuckDB, Apache Spark, Go, Gin or Echo, pgx, client-go, React, TailwindCSS, Monaco Editor, JupyterHub, Docker Compose (local dev), Kubernetes/k3s (production).
+**Stack:** Go + Gin + JWT, React + Vite + TypeScript + TailwindCSS + CodeMirror 6, PostgreSQL 16, RustFS (S3), Marimo (Python env), Spark (local mode), Ollama Cloud API, Docker Compose
 
 **Key rules:**
-- Use PostgreSQL schemas `auth_mgmt` for users/RBAC/sessions/Spark metadata and `ducklake_catalog` for DuckLake metadata.
-- Local dev uses `docker-compose.yml` (postgres + rustfs). Helm charts were removed.
-- Implementation plans in `docs/superpowers/plans` require `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
+- Backend owns kernel execution — no Jupyter. Python and Spark run as persistent REPL processes in Go.
+- `executionCounterRef` is a `useRef` incremented OUTSIDE `setCells` updaters (React StrictMode double-invoke).
+- Backend has NO source volume — code changes require `docker compose up --build backend -d`.
+- Notebooks stored as `.ipynb` with extra `metadata.notebook_type: "python"|"spark"`.
+- AI actions parsed from `<ACTION>` JSON blocks in Ollama Cloud responses.
 
 **Commands:**
-- `docker compose up -d` - start local postgres + rustfs.
-- `docker compose exec postgres psql -U admin -d mylake -c "\dn"` - verify schemas.
-- `docker compose ps` - check container health.
+- `docker compose up -d` — start full stack
+- `docker compose up --build backend -d` — rebuild + restart backend after Go changes
+- `docker compose logs -f backend` — tail backend logs
+
+**URLs:** Frontend :5173 · Backend :8080 · RustFS :9001 · Postgres :5433
 
 ## Last Session
-_2026-04-25 - Completed infra foundation, started frontend brainstorm._
-- Installed Docker, created `docker-compose.yml` for postgres + rustfs local dev.
-- Verified deployment: `ducklake_catalog` + `auth_mgmt` schemas confirmed, rustfs running on port 9000.
-- Merged `feat/infra-foundation` → `master`, removed helm charts (user preference: docker-compose only).
-- Added `scripts/init-schemas.sql` and `scripts/install-k8s-tools.sh`.
-- Started frontend brainstorm — no backend built yet; next question: build Go backend + frontend together or stub backend first?
+_2026-04-29 — fixed Python kernel state, sequential execution counters, docs overhaul_
+- Replaced subprocess-per-cell in `marimo.go` with persistent REPL (same pattern as `sparkconnect.go`) — variables now shared across cells
+- Added `POST /api/marimo/reset`, wired Restart button in `NotebookEditor.tsx` to call it
+- Fixed execution counter: global `executionCounterRef` (useRef), incremented before `setCells` call
+- Rewrote `README.md`, replaced stale `c4-components-mobile-notebook.md` with `c4-components-notebook-editor.md`
+- New living spec: `docs/superpowers/specs/2026-04-29-architecture.md`
 
 ## Docs
-- `docs/superpowers/specs/2026-04-24-mylake-design.md` - Full MyLake architecture spec (Go backend, React frontend, DuckLake, Spark, JupyterHub).
-- `docs/superpowers/plans/2026-04-24-infrastructure-foundation.md` - Completed infra plan (postgres + rustfs).
+- `README.md` — stack, quick start, features, commands
+- `docs/c4-components-notebook-editor.md` — container + component diagrams, kernel flow, full API surface
+- `docs/superpowers/specs/2026-04-29-architecture.md` — architecture decisions, kernel design, state model (current)
+- `docs/superpowers/specs/2026-04-27-unify-notebooks-design.md` — Jupyter→custom editor migration (completed)
 <!-- /unforget -->
