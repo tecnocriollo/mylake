@@ -72,9 +72,9 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
   const [editingCellId, setEditingCellId] = useState<string | null>(null)
   const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set())
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set())
-  const [notebookType, setNotebookType] = useState<'python' | 'spark'>('python')  // Tipo de notebook
-  const [sparkInitialized, setSparkInitialized] = useState(false)  // Track if Spark is already initialized
-  const [_kernelId, setKernelId] = useState<string | null>(null)  // Kernel ID actual
+  const [notebookType, setNotebookType] = useState<'python' | 'spark'>('python')
+  const [sparkStatus, setSparkStatus] = useState<'idle' | 'starting' | 'running' | 'dead'>('idle')
+  const [_kernelId, setKernelId] = useState<string | null>(null)
 
   // Load kernel info on mount
   useEffect(() => {
@@ -90,8 +90,29 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
   const [selectedCellId, setSelectedCellId] = useState<string | undefined>(undefined)
 
   const cellRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const executionCounterRef = useRef(0)
 
   const headers = { Authorization: `Bearer ${token}` }
+
+  // Poll Spark kernel status every 5s when in Spark mode
+  useEffect(() => {
+    if (notebookType !== 'spark') return
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/spark-connect/status`, { headers })
+        setSparkStatus(prev => {
+          if (res.data.status === 'healthy') return 'running'
+          if (prev === 'running') return 'dead'
+          return prev
+        })
+      } catch {
+        setSparkStatus(prev => prev === 'running' ? 'dead' : prev)
+      }
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => clearInterval(id)
+  }, [notebookType, token])
 
   // Load notebooks list
   const loadNotebooks = useCallback(async () => {
@@ -239,9 +260,8 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
     }
   }
 
-  // Reset sparkInitialized when notebook type changes
   useEffect(() => {
-    setSparkInitialized(false)
+    setSparkStatus('idle')
   }, [notebookType])
 
   // Restart kernel
@@ -249,19 +269,14 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
     if (!confirm('Restart kernel? All variables will be lost.')) return
 
     try {
-      // Get current kernel
-      const currentKernel = await getActiveKernel()
-      if (currentKernel) {
-        // Restart via Jupyter API
-        await axios.post(
-          `${API_BASE_URL}/api/jupyter/proxy/api/kernels/${currentKernel}/restart`,
-          {},
-          { headers }
-        )
+      if (notebookType === 'spark') {
+        await axios.post(`${API_BASE_URL}/api/spark-connect/reset`, {}, { headers })
+      } else {
+        await axios.post(`${API_BASE_URL}/api/marimo/reset`, {}, { headers })
       }
-      // Reset Spark state
-      setSparkInitialized(false)
+      setSparkStatus('idle')
       setKernelId(null)
+      executionCounterRef.current = 0
       setSuccess('Kernel restarted!')
       setTimeout(() => setSuccess(''), 2000)
     } catch (err: any) {
@@ -314,6 +329,9 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
     if (!cell || cell.cell_type !== 'code') return
 
     setExecutingCells(prev => new Set([...prev, cellId]))
+    if (notebookType === 'spark') {
+      setSparkStatus(prev => prev === 'idle' || prev === 'dead' ? 'starting' : prev)
+    }
 
     try {
       await serverLog(token, 'Starting cell execution', { cellId, code: cell.source.join('').slice(0, 100) })
@@ -332,27 +350,28 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
       const result = response.data
       await serverLog(token, 'Execute result', result)
 
-      // Marcar Spark como inicializado si fue exitoso
-      if (notebookType === 'spark' && !sparkInitialized && result.success) {
-        setSparkInitialized(true)
-      }
-
+      const execCount = ++executionCounterRef.current
       setCells(prev => prev.map(c => {
         if (c.id === cellId) {
-          // Formatear outputs según el tipo de respuesta
           let outputs: any[]
 
-          if (result.outputs?.length > 0) {
+          if (result.error) {
+            const lines = result.error.split('\n')
+            outputs = [{
+              output_type: 'error',
+              ename: 'SparkError',
+              evalue: lines[0] || result.error,
+              traceback: lines
+            }]
+          } else if (result.outputs?.length > 0) {
             outputs = [{ output_type: 'stream', text: result.outputs }]
-          } else if (result.error) {
-            outputs = [{ output_type: 'error', text: [result.error] }]
           } else {
             outputs = [{ output_type: 'stream', text: ['(no output)'] }]
           }
 
           return {
             ...c,
-            execution_count: (c.execution_count || 0) + 1,
+            execution_count: execCount,
             outputs: outputs
           }
         }
@@ -387,10 +406,8 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
     }
   }
 
-  // Estado para mostrar mensaje de inicialización de Spark
-  const isSparkInitializing = (cellId: string) => {
-    return notebookType === 'spark' && executingCells.has(cellId) && !sparkInitialized
-  }
+  const isSparkInitializing = (cellId: string) =>
+    notebookType === 'spark' && executingCells.has(cellId) && sparkStatus === 'starting'
 
   // Toggle output collapse
   const toggleOutput = (cellId: string) => {
@@ -404,6 +421,23 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
       return newSet
     })
   }
+
+  // Ctrl+Enter / Cmd+Enter ejecuta celda activa
+  const activeCellIdRef = useRef(activeCellId)
+  activeCellIdRef.current = activeCellId
+  const executeCellRef = useRef(executeCell)
+  executeCellRef.current = executeCell
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && activeCellIdRef.current) {
+        e.preventDefault()
+        executeCellRef.current(activeCellIdRef.current)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // Swipe handling
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -606,6 +640,23 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
             <option value="python">🐍 Python</option>
             <option value="spark">⚡ Spark</option>
           </select>
+          {notebookType === 'spark' && (() => {
+            const cfg = {
+              idle:     { color: 'bg-gray-400',   label: 'Sin iniciar' },
+              starting: { color: 'bg-yellow-400', label: 'Iniciando...' },
+              running:  { color: 'bg-green-500',  label: 'Activo' },
+              dead:     { color: 'bg-red-500',     label: 'Muerto' },
+            }[sparkStatus]
+            return (
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded cursor-default"
+                title={`Spark kernel: ${cfg.label}`}
+              >
+                <div className={`w-2.5 h-2.5 rounded-full ${cfg.color} ${sparkStatus === 'starting' ? 'animate-pulse' : ''}`} />
+                <span className="text-xs text-gray-600 font-medium">{cfg.label}</span>
+              </div>
+            )
+          })()}
           <button
             onClick={restartKernel}
             className="bg-red-600 text-white px-3 py-1.5 rounded text-sm font-medium"
@@ -634,11 +685,11 @@ export default function NotebookEditor({ token, notebookPath }: NotebookEditorPr
               onClick={async () => {
                 try {
                   const response = await axios.get(
-                    `${API_BASE_URL}/api/jupyter/spark-logs`,
+                    `${API_BASE_URL}/api/spark-connect/logs`,
                     { headers }
                   )
                   const logs = response.data.logs || response.data.message || 'No logs available'
-                  alert(logs.slice(-2000) || 'No logs yet')
+                  alert(logs.slice(-3000) || 'No logs yet')
                 } catch (err: any) {
                   setError('Failed to fetch logs: ' + err.message)
                 }

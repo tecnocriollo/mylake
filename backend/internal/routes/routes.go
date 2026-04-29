@@ -53,5 +53,21 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 		protected.GET("/jupyter/kernels", jupyterHandler.GetKernels)
 		protected.GET("/jupyter/spark-logs", jupyterHandler.GetSparkLogs)
 		protected.Any("/jupyter/proxy/:path", jupyterHandler.ProxyRequest)
+		
+		// AI Assistant endpoints
+		protected.GET("/ai/models", handlers.ListModels)
+		protected.POST("/ai/chat", handlers.AIChat)
+		
+		// Marimo endpoints (reemplaza Jupyter)
+		protected.GET("/marimo/status", handlers.MarimoStatus)
+		protected.POST("/marimo/execute", handlers.ExecuteMarimo)
+		protected.POST("/marimo/reset", handlers.ResetPythonKernel)
+		
+		// Spark Connect endpoints
+		protected.GET("/spark-connect/status", handlers.SparkConnectStatus)
+		protected.GET("/spark-connect/info", handlers.SparkConnectProxy)
+		protected.POST("/spark-connect/execute", handlers.ExecuteSparkConnect)
+		protected.GET("/spark-connect/logs", handlers.GetSparkLogs)
+		protected.POST("/spark-connect/reset", handlers.ResetSparkKernel)
 	}
 }
