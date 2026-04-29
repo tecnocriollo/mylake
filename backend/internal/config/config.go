@@ -5,11 +5,12 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	JWTSecret   string
-	Port        string
-	JupyterURL  string
+	DatabaseURL  string
+	JWTSecret    string
+	Port         string
+	JupyterURL   string
 	JupyterToken string
+	OllamaAPIKey string
 }
 
 func Load() *Config {
@@ -19,6 +20,7 @@ func Load() *Config {
 		Port:         getEnv("PORT", "8080"),
 		JupyterURL:   getEnv("JUPYTER_URL", "http://jupyter:8888"),
 		JupyterToken: getEnv("JUPYTER_TOKEN", "mylake-token-123"),
+		OllamaAPIKey: getEnv("OLLAMA_API_KEY", ""),
 	}
 }
 

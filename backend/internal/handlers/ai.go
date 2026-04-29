@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-// OllamaConfig holds the configuration for Ollama Cloud
-var OllamaAPIKey = "dc78edcb1b004e6593ab05bae51717ee.tsEQx5KmeNbDrmNnXoLLlRpy"
+var OllamaAPIKey = os.Getenv("OLLAMA_API_KEY")
 var OllamaBaseURL = "https://ollama.com"
 
 // AIChatRequest represents a chat request

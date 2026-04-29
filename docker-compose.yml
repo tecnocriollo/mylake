@@ -10,7 +10,7 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_started
-      jupyter:
+      marimo:
         condition: service_healthy
     networks:
       - default
@@ -53,6 +53,7 @@ services:
       NOTEBOOKS_DIR: /app/notebooks
       JUPYTER_URL: http://jupyter:8888
       JUPYTER_TOKEN: mylake-token-123
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
     ports:
       - "0.0.0.0:8080:8080"
     depends_on:
@@ -78,41 +79,46 @@ services:
     depends_on:
       - backend
 
-  jupyter:
+  spark:
     build:
-      context: ./jupyter
+      context: ./spark
       dockerfile: Dockerfile
     environment:
-      JUPYTER_ENABLE_LAB: "yes"
-      JUPYTER_TOKEN: "mylake-token-123"
-      SPARK_OPTS: "--driver-memory=2g --executor-memory=2g"
-      JUPYTER_URL: "http://207.180.223.160:8888"
-      PYTHONPATH: "/usr/local/spark/python:/opt/conda/lib/python3.11/site-packages"
-      PYSPARK_PYTHON: "/opt/conda/bin/python"
-      PYSPARK_DRIVER_PYTHON: "/opt/conda/bin/python"
-      JUPYTER_CONFIG: |
-        c.NotebookApp.token = 'mylake-token-123'
-        c.NotebookApp.password = ''
-        c.NotebookApp.allow_origin = '*'
-        c.NotebookApp.allow_remote_access = True
-        c.NotebookApp.disable_check_xsrf = True
-        c.NotebookApp.ip = '0.0.0.0'
-        c.NotebookApp.tornado_settings = {
-            'headers': {
-                'Content-Security-Policy': "frame-ancestors * 'self' http://207.180.223.160:5173 http://localhost:5173",
-                'X-Frame-Options': 'ALLOWALL'
-            }
-        }
+      SPARK_CONNECT_MODE_ENABLED: "1"
     ports:
-      - "0.0.0.0:8888:8888"
+      - "0.0.0.0:15002:15002"
+      - "0.0.0.0:4040:4040"
     volumes:
-      - jupyter-data:/home/jovyan/work
-      - ./notebooks:/home/jovyan/notebooks
-      - ./scripts/jupyter-config.py:/home/jovyan/.jupyter/jupyter_notebook_config.py
+      - spark-data:/tmp/spark-events
+      - ./notebooks:/notebooks
     depends_on:
       - postgres
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "15002"]
+      interval: 10s
+      retries: 5
+
+  marimo:
+    build:
+      context: ./marimo
+      dockerfile: Dockerfile
+    environment:
+      MARIMO_HOST: "0.0.0.0"
+      MARIMO_PORT: "2718"
+    ports:
+      - "0.0.0.0:2718:2718"
+    volumes:
+      - marimo-data:/app/notebooks
+      - ./notebooks:/app/notebooks
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2718"]
+      interval: 10s
+      retries: 5
 
 volumes:
   postgres-data:
   rustfs-data:
   jupyter-data:
+  spark-data:

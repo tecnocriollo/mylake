@@ -116,6 +116,30 @@ docker compose restart
 docker compose down -v && docker compose up -d
 ```
 
+## 🤖 AI Assistant Setup
+
+The AI assistant requires an [Ollama Cloud](https://ollama.com) API key.
+
+**1. Get your key** — sign in at ollama.com and copy your API key.
+
+**2. Set the environment variable** before running `docker compose up`:
+
+```bash
+export OLLAMA_API_KEY=your-key-here
+docker compose up -d
+```
+
+Or create a `.env` file in the project root:
+
+```bash
+# .env
+OLLAMA_API_KEY=your-key-here
+```
+
+Docker Compose picks up `.env` automatically.
+
+Without a key, the AI assistant panel will show errors. Everything else (SQL workbench, notebooks) works without it.
+
 ## 🔒 Security Notes
 
 Change these before any non-local deployment:
