@@ -23,9 +23,10 @@ type JupyterHandler struct {
 	Token     string
 	kernels   map[string]string // Map of kernel type -> kernel ID
 	kernelMu  sync.RWMutex
+	lake      *LakeHandler // workspace files on RustFS (Lake explorer .ipynb)
 }
 
-func NewJupyterHandler(cfg *config.Config) *JupyterHandler {
+func NewJupyterHandler(cfg *config.Config, lake *LakeHandler) *JupyterHandler {
 	baseURL := cfg.JupyterURL
 	if baseURL == "" {
 		baseURL = "http://localhost:8888"
@@ -38,6 +39,7 @@ func NewJupyterHandler(cfg *config.Config) *JupyterHandler {
 		BaseURL: baseURL,
 		Token:   token,
 		kernels: make(map[string]string),
+		lake:    lake,
 	}
 }
 
@@ -175,23 +177,26 @@ func (h *JupyterHandler) GetNotebook(c *gin.Context) {
 	}
 	
 	fullPath := filepath.Join(getNotebooksDir(), path)
-	
+
 	data, err := os.ReadFile(fullPath)
+	if err != nil && os.IsNotExist(err) && h.lake != nil {
+		data, err = h.lake.ReadWorkspaceObject(c.Request.Context(), path)
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || isNoSuchKeyErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "notebook not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	var notebook Notebook
 	if err := json.Unmarshal(data, &notebook); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid notebook format"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, notebook)
 }
 
@@ -214,26 +219,48 @@ func (h *JupyterHandler) SaveNotebook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
-	// Ensure directory exists
-	dir := filepath.Dir(filepath.Join(getNotebooksDir(), path))
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	
+
 	data, err := json.MarshalIndent(notebook, "", "  ")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	fullPath := filepath.Join(getNotebooksDir(), path)
+	ctx := c.Request.Context()
+
+	if _, statErr := os.Stat(fullPath); statErr == nil {
+		if err := os.WriteFile(fullPath, data, 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "notebook saved"})
+		return
+	}
+	if statErr != nil && !os.IsNotExist(statErr) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": statErr.Error()})
+		return
+	}
+
+	if h.lake != nil {
+		if err := h.lake.WriteWorkspaceObject(ctx, path, data, "application/json"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "notebook saved"})
+		return
+	}
+
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{"message": "notebook saved"})
 }
 
@@ -330,17 +357,41 @@ func (h *JupyterHandler) DeleteNotebook(c *gin.Context) {
 	}
 	
 	fullPath := filepath.Join(getNotebooksDir(), path)
-	
-	if err := os.Remove(fullPath); err != nil {
-		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "notebook not found"})
+	ctx := c.Request.Context()
+
+	localRemoved := false
+	if _, statErr := os.Stat(fullPath); statErr == nil {
+		if err := os.Remove(fullPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		localRemoved = true
+	}
+
+	lakeRemoved := false
+	if h.lake != nil {
+		_, rerr := h.lake.ReadWorkspaceObject(ctx, path)
+		switch {
+		case rerr == nil:
+			if err := h.lake.DeleteWorkspaceObject(ctx, path); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			lakeRemoved = true
+		case isNoSuchKeyErr(rerr):
+			// nothing on lake
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": rerr.Error()})
+			return
+		}
+	}
+
+	if localRemoved || lakeRemoved {
+		c.JSON(http.StatusOK, gin.H{"message": "notebook deleted"})
 		return
 	}
-	
-	c.JSON(http.StatusOK, gin.H{"message": "notebook deleted"})
+
+	c.JSON(http.StatusNotFound, gin.H{"error": "notebook not found"})
 }
 
 // ExecuteCell executes a code cell via WebSocket to Jupyter kernel

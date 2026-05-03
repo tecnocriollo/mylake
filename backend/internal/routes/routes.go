@@ -32,7 +32,7 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 		protected.POST("/query", queryHandler.Execute)
 
 		// Lake endpoints
-		lakeHandler := handlers.NewLakeHandler(db)
+		lakeHandler := handlers.NewLakeHandler(db, cfg)
 		protected.GET("/lake/schemas", lakeHandler.ListSchemas)
 		protected.GET("/lake/files", lakeHandler.ListFiles)
 		protected.POST("/lake/files/create", lakeHandler.CreateFile)
@@ -42,7 +42,7 @@ func Setup(r *gin.Engine, db *database.DB, cfg *config.Config) {
 		protected.GET("/errors/logs", errorHandler.GetLogs)
 
 		// Jupyter notebook endpoints
-		jupyterHandler := handlers.NewJupyterHandler(cfg)
+		jupyterHandler := handlers.NewJupyterHandler(cfg, lakeHandler)
 		protected.GET("/jupyter/notebooks", jupyterHandler.ListNotebooks)
 		protected.GET("/jupyter/notebooks/:path", jupyterHandler.GetNotebook)
 		protected.PUT("/jupyter/notebooks/:path", jupyterHandler.SaveNotebook)

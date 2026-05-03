@@ -43,33 +43,30 @@ else
     echo "      ⚠️  RustFS not responding (non-critical)"
 fi
 
-# Test 4: Jupyter Lab Basic Connectivity
-echo "[4/6] 🔥 Testing Jupyter Lab connectivity..."
-if nc -z jupyter 8888 2>/dev/null; then
-    echo "      ✅ Jupyter Lab is responding on port 8888"
+# Test 4: Marimo connectivity
+echo "[4/6] 🐍 Testing Marimo connectivity..."
+if nc -z marimo 2718 2>/dev/null; then
+    echo "      ✅ Marimo is responding on port 2718"
 else
-    echo "      ❌ Jupyter Lab not responding on port 8888"
+    echo "      ❌ Marimo not responding on port 2718"
     exit 1
 fi
 
-# Test 5: Jupyter Integration (iframe/CORS compatibility)
-echo "[5/6] 🔗 Testing Jupyter iframe integration..."
-JUPYTER_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token mylake-token-123" http://jupyter:8888/api/status 2>/dev/null || echo "000")
-if [ "$JUPYTER_RESPONSE" = "200" ]; then
-    echo "      ✅ Jupyter API responding with token auth"
+# Test 5: Marimo API integration
+echo "[5/6] 🔗 Testing Marimo API integration..."
+MARIMO_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://marimo:2718 2>/dev/null || echo "000")
+if [ "$MARIMO_RESPONSE" = "200" ]; then
+    echo "      ✅ Marimo API responding"
     
-    # Check if Jupyter allows iframe embedding by checking headers
-    CSP_HEADER=$(curl -sI -H "Authorization: token mylake-token-123" http://jupyter:8888/api/status 2>/dev/null | grep -i "Content-Security-Policy" | grep -i "frame-ancestors" || echo "")
+    # Check if marimo allows iframe embedding by checking headers
+    CSP_HEADER=$(curl -sI http://marimo:2718 2>/dev/null | grep -i "Content-Security-Policy" | grep -i "frame-ancestors" || echo "")
     if [ -n "$CSP_HEADER" ]; then
-        echo "      ✅ Jupyter CSP headers configured for iframe embedding"
+        echo "      ✅ Marimo CSP headers configured for iframe embedding"
     else
-        echo "      ⚠️  Jupyter CSP headers may need review for iframe support"
+        echo "      ⚠️  Marimo CSP headers may need review for iframe support"
     fi
-elif [ "$JUPYTER_RESPONSE" = "403" ]; then
-    echo "      ⚠️  Jupyter responding but auth/CORS issues detected (HTTP 403)"
-    echo "      ⚠️  Iframe embedding may not work properly"
 else
-    echo "      ⚠️  Jupyter API check returned HTTP $JUPYTER_RESPONSE"
+    echo "      ⚠️  Marimo API check returned HTTP $MARIMO_RESPONSE"
 fi
 
 # Test 6: Backend API
@@ -94,8 +91,8 @@ echo "Summary:"
 echo "  ✅ PostgreSQL: Required for operation"
 echo "  ✅ Catalog:    Information schema accessible"
 echo "  ⚡ Filesystem: Optional (RustFS/S3 storage)"
-echo "  🔥 Jupyter:    PySpark integration"
-echo "  🔗 J-iframe:   Embedding support"
+echo "  🐍 Marimo:     Python notebook engine"
+echo "  🔗 M-iframe:   Embedding support"
 echo "  🔌 Backend:    API services"
 echo ""
 exit 0

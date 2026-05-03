@@ -54,6 +54,11 @@ services:
       JUPYTER_URL: http://jupyter:8888
       JUPYTER_TOKEN: mylake-token-123
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      RUSTFS_ENDPOINT: rustfs:9000
+      RUSTFS_ACCESS_KEY: mylake-access
+      RUSTFS_SECRET_KEY: mylake-secret-key
+      RUSTFS_BUCKET: lakehouse
+      RUSTFS_USE_SSL: "false"
     ports:
       - "0.0.0.0:8080:8080"
     depends_on:

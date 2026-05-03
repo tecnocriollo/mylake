@@ -11,6 +11,11 @@ type Config struct {
 	JupyterURL   string
 	JupyterToken string
 	OllamaAPIKey string
+	RustFSEndpoint  string
+	RustFSAccessKey string
+	RustFSSecretKey string
+	RustFSBucket    string
+	RustFSUseSSL    string
 }
 
 func Load() *Config {
@@ -21,6 +26,11 @@ func Load() *Config {
 		JupyterURL:   getEnv("JUPYTER_URL", "http://jupyter:8888"),
 		JupyterToken: getEnv("JUPYTER_TOKEN", "mylake-token-123"),
 		OllamaAPIKey: getEnv("OLLAMA_API_KEY", ""),
+		RustFSEndpoint:  getEnv("RUSTFS_ENDPOINT", "rustfs:9000"),
+		RustFSAccessKey: getEnv("RUSTFS_ACCESS_KEY", "mylake-access"),
+		RustFSSecretKey: getEnv("RUSTFS_SECRET_KEY", "mylake-secret-key"),
+		RustFSBucket:    getEnv("RUSTFS_BUCKET", "lakehouse"),
+		RustFSUseSSL:    getEnv("RUSTFS_USE_SSL", "false"),
 	}
 }
 

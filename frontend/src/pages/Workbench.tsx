@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import CodeMirrorEditor from '../components/CodeMirrorEditor'
 import axios from 'axios'
 import { API_BASE_URL } from '../config'
@@ -9,6 +10,7 @@ interface WorkbenchProps {
 }
 
 function Workbench({ token }: WorkbenchProps) {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('SELECT * FROM auth_mgmt.users LIMIT 10;')
   const [results, setResults] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -46,6 +48,12 @@ function Workbench({ token }: WorkbenchProps) {
     setQuery(newQuery)
     setSidebarOpen(false)
     document.getElementById('sql-editor')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handleSelectFile = (path: string) => {
+    if (!path.toLowerCase().endsWith('.ipynb')) return
+    navigate(`/notebook/${encodeURIComponent(path)}`)
+    setSidebarOpen(false)
   }
 
   return (
@@ -91,6 +99,7 @@ function Workbench({ token }: WorkbenchProps) {
             <LakeExplorer
               token={token}
               onSelectTable={handleSelectTable}
+              onSelectFile={handleSelectFile}
               onCreateTable={handleCreateTable}
             />
           </div>

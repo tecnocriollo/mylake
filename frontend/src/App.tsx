@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { setSessionExpiredHandler } from './auth/session'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Workbench from './pages/Workbench'
@@ -20,10 +21,15 @@ function App() {
     setToken(newToken)
   }
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('token')
     setToken(null)
-  }
+  }, [])
+
+  useEffect(() => {
+    setSessionExpiredHandler(handleLogout)
+    return () => setSessionExpiredHandler(null)
+  }, [handleLogout])
 
   return (
     <Routes>

@@ -1,14 +1,23 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/gin-gonic/gin"
+	"mylake/internal/config"
 	"mylake/internal/database"
 )
 
@@ -33,11 +42,38 @@ type DeleteFileRequest struct {
 }
 
 type LakeHandler struct {
-	DB *database.DB
+	DB       *database.DB
+	S3Client *s3.Client
+	Bucket   string
 }
 
-func NewLakeHandler(db *database.DB) *LakeHandler {
-	return &LakeHandler{DB: db}
+func NewLakeHandler(db *database.DB, cfg *config.Config) *LakeHandler {
+	useSSL := strings.EqualFold(cfg.RustFSUseSSL, "true")
+	scheme := "http"
+	if useSSL {
+		scheme = "https"
+	}
+	endpoint := fmt.Sprintf("%s://%s", scheme, cfg.RustFSEndpoint)
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(cfg.RustFSAccessKey, cfg.RustFSSecretKey, ""),
+		),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize RustFS client: %v", err))
+	}
+
+	return &LakeHandler{
+		DB:       db,
+		S3Client: s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		}),
+		Bucket:   cfg.RustFSBucket,
+	}
 }
 
 // ListSchemas devuelve todos los esquemas y tablas de PostgreSQL
@@ -113,15 +149,21 @@ func (h *LakeHandler) ListSchemas(c *gin.Context) {
 	})
 }
 
-// ListFiles devuelve archivos del workspace de Jupyter
+// ListFiles devuelve archivos del bucket S3 (RustFS)
 func (h *LakeHandler) ListFiles(c *gin.Context) {
-	basePath := "/home/jovyan/work"
-	
-	// Asegurar que existe
-	os.MkdirAll(basePath, 0755)
+	ctx := c.Request.Context()
 
-	items := listDirectory(basePath, "")
-	
+	if err := h.ensureBucket(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	items, err := h.listPrefixTree(ctx, "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, LakeItem{
 		Type:     "folder",
 		Name:     "Workspace",
@@ -138,26 +180,34 @@ func (h *LakeHandler) CreateFile(c *gin.Context) {
 		return
 	}
 
-	basePath := "/home/jovyan/work"
-	fullPath := filepath.Join(basePath, req.Path, req.Name)
-	
-	// Security: prevent directory traversal
-	if !isSubPath(fullPath, basePath) {
+	key := normalizeObjectKey(req.Path, req.Name)
+	if key == "" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid path"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.ensureBucket(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	switch req.Type {
 	case "folder":
-		if err := os.MkdirAll(fullPath, 0755); err != nil {
+		folderKey := strings.TrimSuffix(key, "/") + "/"
+		_, err := h.S3Client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(h.Bucket),
+			Key:    aws.String(folderKey),
+			Body:   bytes.NewReader(nil),
+		})
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 	case "python":
-		// Ensure .py extension
 		if filepath.Ext(req.Name) != ".py" {
-			fullPath += ".py"
+			key += ".py"
 		}
 		
 		content := fmt.Sprintf(`# %s
@@ -175,15 +225,20 @@ print(f"Spark Version: {spark.version}")
 
 `, req.Name)
 		
-		if err := ioutil.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		_, err := h.S3Client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(h.Bucket),
+			Key:         aws.String(key),
+			Body:        strings.NewReader(content),
+			ContentType: aws.String("text/x-python"),
+		})
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 	case "notebook":
-		// Ensure .ipynb extension
 		if filepath.Ext(req.Name) != ".ipynb" {
-			fullPath += ".ipynb"
+			key += ".ipynb"
 		}
 		
 		content := `{
@@ -222,7 +277,13 @@ print(f"Spark Version: {spark.version}")
  "nbformat_minor": 4
 }`
 		
-		if err := ioutil.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		_, err := h.S3Client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(h.Bucket),
+			Key:         aws.String(key),
+			Body:        strings.NewReader(content),
+			ContentType: aws.String("application/x-ipynb+json"),
+		})
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -232,7 +293,7 @@ print(f"Spark Version: {spark.version}")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "path": fullPath})
+	c.JSON(http.StatusOK, gin.H{"success": true, "path": key})
 }
 
 // DeleteFile elimina archivos o carpetas
@@ -243,95 +304,294 @@ func (h *LakeHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	basePath := "/home/jovyan/work"
-	fullPath := filepath.Join(basePath, req.Path)
-	
-	// Security: prevent directory traversal
-	if !isSubPath(fullPath, basePath) {
+	key := sanitizeRelativePath(req.Path)
+	if key == "" && req.Path != "/" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid path"})
 		return
 	}
 
-	if err := os.RemoveAll(fullPath); err != nil {
+	ctx := c.Request.Context()
+	if err := h.ensureBucket(ctx); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Delete folder recursively by prefix, or file by exact key.
+	prefix := key
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	foundFolder := false
+
+	paginator := s3.NewListObjectsV2Paginator(h.S3Client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(h.Bucket),
+		Prefix: aws.String(prefix),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, object := range page.Contents {
+			foundFolder = true
+			_, err = h.S3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: aws.String(h.Bucket),
+				Key:    object.Key,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
+	if !foundFolder {
+		_, err := h.S3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket: aws.String(h.Bucket),
+			Key:    aws.String(key),
+		})
+		if err != nil && !isNoSuchKeyErr(err) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func listDirectory(basePath, relPath string) []LakeItem {
-	fullPath := filepath.Join(basePath, relPath)
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
+func (h *LakeHandler) ensureBucket(ctx context.Context) error {
+	_, err := h.S3Client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(h.Bucket),
+	})
+	if err == nil {
 		return nil
 	}
+	_, createErr := h.S3Client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String(h.Bucket),
+	})
+	if createErr != nil && !isBucketAlreadyOwnedErr(createErr) {
+		return createErr
+	}
+	return nil
+}
 
-	var items []LakeItem
-	for _, entry := range entries {
-		name := entry.Name()
-		path := filepath.Join(relPath, name)
-		
-		item := LakeItem{
-			Name: name,
-			Path: path,
-		}
-
-		if entry.IsDir() {
-			item.Type = "folder"
-			item.Children = listDirectory(basePath, path)
-			
-			// Detectar formato lakehouse (carpetas con archivos .parquet)
-			if hasParquetFiles(filepath.Join(basePath, path)) {
-				item.Format = "delta"
-			}
-		} else {
-			item.Type = "file"
-			ext := filepath.Ext(name)
-			switch ext {
-			case ".parquet":
-				item.Format = "parquet"
-			case ".csv":
-				item.Format = "csv"
-			case ".json":
-				item.Format = "json"
-			case ".ipynb":
-				item.Format = "notebook"
-			case ".py":
-				item.Format = "python"
-			}
-			
-			if info, err := entry.Info(); err == nil {
-				item.Size = info.Size()
-			}
-		}
-
-		items = append(items, item)
+func (h *LakeHandler) listPrefixTree(ctx context.Context, prefix string) ([]LakeItem, error) {
+	root := &treeNode{
+		isFolder: true,
+		children: map[string]*treeNode{},
 	}
 
+	paginator := s3.NewListObjectsV2Paginator(h.S3Client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(h.Bucket),
+		Prefix: aws.String(prefix),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, object := range page.Contents {
+			key := strings.TrimPrefix(aws.ToString(object.Key), prefix)
+			if key == "" {
+				continue
+			}
+			insertObjectIntoTree(root, key, aws.ToInt64(object.Size), strings.HasSuffix(aws.ToString(object.Key), "/"))
+		}
+	}
+
+	return treeToLakeItems(root, prefix), nil
+}
+
+type treeNode struct {
+	isFolder bool
+	size     int64
+	format   string
+	children map[string]*treeNode
+}
+
+func insertObjectIntoTree(root *treeNode, key string, size int64, isFolderMarker bool) {
+	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
+	if cleanKey == "" {
+		return
+	}
+	parts := strings.Split(cleanKey, "/")
+	current := root
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+
+		child, ok := current.children[part]
+		if !ok {
+			child = &treeNode{
+				isFolder: i < len(parts)-1,
+				children: map[string]*treeNode{},
+			}
+			current.children[part] = child
+		}
+
+		if i == len(parts)-1 {
+			if isFolderMarker {
+				child.isFolder = true
+			} else {
+				child.isFolder = false
+				child.size = size
+				child.format = inferFileFormat(part)
+			}
+		}
+
+		current = child
+	}
+}
+
+func treeToLakeItems(node *treeNode, prefix string) []LakeItem {
+	keys := make([]string, 0, len(node.children))
+	for name := range node.children {
+		keys = append(keys, name)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		left := node.children[keys[i]]
+		right := node.children[keys[j]]
+		if left.isFolder != right.isFolder {
+			return left.isFolder
+		}
+		return strings.ToLower(keys[i]) < strings.ToLower(keys[j])
+	})
+
+	items := make([]LakeItem, 0, len(keys))
+	for _, name := range keys {
+		child := node.children[name]
+		item := LakeItem{
+			Name: name,
+			Path: strings.TrimSuffix(prefix+name, "/"),
+		}
+		if child.isFolder {
+			item.Type = "folder"
+			item.Children = treeToLakeItems(child, prefix+name+"/")
+		} else {
+			item.Type = "file"
+			item.Size = child.size
+			item.Format = child.format
+		}
+		items = append(items, item)
+	}
 	return items
 }
 
-func hasParquetFiles(path string) bool {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return false
+func normalizeObjectKey(parentPath, name string) string {
+	parent := sanitizeRelativePath(parentPath)
+	filename := strings.TrimSpace(strings.Trim(name, "/"))
+	if filename == "" {
+		return ""
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".parquet" {
-			return true
-		}
-		if entry.IsDir() && hasParquetFiles(filepath.Join(path, entry.Name())) {
-			return true
-		}
+	if parent == "" {
+		return filename
+	}
+	return parent + "/" + filename
+}
+
+func sanitizeRelativePath(path string) string {
+	clean := strings.TrimSpace(path)
+	if clean == "" || clean == "/" {
+		return ""
+	}
+	clean = filepath.ToSlash(filepath.Clean("/" + clean))
+	clean = strings.TrimPrefix(clean, "/")
+	if clean == "." || strings.HasPrefix(clean, "../") || clean == ".." {
+		return ""
+	}
+	return strings.TrimSuffix(clean, "/")
+}
+
+func inferFileFormat(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".parquet":
+		return "parquet"
+	case ".csv":
+		return "csv"
+	case ".json":
+		return "json"
+	case ".ipynb":
+		return "notebook"
+	case ".py":
+		return "python"
+	default:
+		return ""
+	}
+}
+
+func sanitizeWorkspaceObjectKey(path string) (string, bool) {
+	key := strings.TrimSpace(filepath.ToSlash(path))
+	key = strings.TrimPrefix(key, "/")
+	if key == "" || strings.Contains(key, "..") {
+		return "", false
+	}
+	return key, true
+}
+
+// ReadWorkspaceObject returns an object from the RustFS lake bucket (workspace files).
+func (h *LakeHandler) ReadWorkspaceObject(ctx context.Context, path string) ([]byte, error) {
+	key, ok := sanitizeWorkspaceObjectKey(path)
+	if !ok {
+		return nil, fmt.Errorf("invalid path")
+	}
+	out, err := h.S3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(h.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer out.Body.Close()
+	return io.ReadAll(out.Body)
+}
+
+// WriteWorkspaceObject writes an object to the lake bucket.
+func (h *LakeHandler) WriteWorkspaceObject(ctx context.Context, path string, body []byte, contentType string) error {
+	key, ok := sanitizeWorkspaceObjectKey(path)
+	if !ok {
+		return fmt.Errorf("invalid path")
+	}
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	_, err := h.S3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(h.Bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(body),
+		ContentType: aws.String(contentType),
+	})
+	return err
+}
+
+// DeleteWorkspaceObject removes an object from the lake bucket.
+func (h *LakeHandler) DeleteWorkspaceObject(ctx context.Context, path string) error {
+	key, ok := sanitizeWorkspaceObjectKey(path)
+	if !ok {
+		return fmt.Errorf("invalid path")
+	}
+	_, err := h.S3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(h.Bucket),
+		Key:    aws.String(key),
+	})
+	return err
+}
+
+func isNoSuchKeyErr(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.ErrorCode() == "NoSuchKey"
 	}
 	return false
 }
 
-func isSubPath(path, base string) bool {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
+func isBucketAlreadyOwnedErr(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "BucketAlreadyOwnedByYou" || code == "BucketAlreadyExists"
 	}
-	return !filepath.IsAbs(rel) && rel != ".." && !filepath.HasPrefix(rel, "..")
+	return false
 }
+

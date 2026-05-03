@@ -33,7 +33,8 @@ function Layout({ onLogout }: LayoutProps) {
               <Link
                 to="/notebooks"
                 className={`px-3 py-2 rounded-md text-sm font-medium ${
-                  location.pathname === '/notebooks'
+                  location.pathname === '/notebooks' ||
+                  location.pathname.startsWith('/notebook/')
                     ? 'bg-green-100 text-green-700'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -82,7 +83,8 @@ function Layout({ onLogout }: LayoutProps) {
                 to="/notebooks"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`block px-3 py-2 rounded-md text-base font-medium ${
-                  location.pathname === '/notebooks'
+                  location.pathname === '/notebooks' ||
+                  location.pathname.startsWith('/notebook/')
                     ? 'bg-green-100 text-green-700'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
