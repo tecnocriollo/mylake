@@ -11,21 +11,23 @@
 - Backend has NO source volume — code changes require `docker compose up --build backend -d`.
 - Notebooks stored as `.ipynb` with extra `metadata.notebook_type: "python"|"spark"`.
 - AI actions parsed from `<ACTION>` JSON blocks in Ollama Cloud responses.
+- Frontend runs in Docker (Vite dev server). Browser API calls go to `https://api.mylake.tecnocriollo.com` — nginx reverse proxy on host → Docker backend:8080. DNS must resolve on host machine via `/etc/hosts`.
 
 **Commands:**
 - `docker compose up -d` — start full stack
 - `docker compose up --build backend -d` — rebuild + restart backend after Go changes
 - `docker compose logs -f backend` — tail backend logs
 
-**URLs:** Frontend :5173 · Backend :8080 · RustFS :9001 · Postgres :5433
+**URLs:** Frontend :5173 · Backend :8080 (also via nginx at api.mylake.tecnocriollo.com:443) · RustFS :9001 · Postgres :5433
 
 ## Last Session
-_2026-04-29 — fixed Python kernel state, sequential execution counters, docs overhaul_
-- Replaced subprocess-per-cell in `marimo.go` with persistent REPL (same pattern as `sparkconnect.go`) — variables now shared across cells
-- Added `POST /api/marimo/reset`, wired Restart button in `NotebookEditor.tsx` to call it
-- Fixed execution counter: global `executionCounterRef` (useRef), incremented before `setCells` call
-- Rewrote `README.md`, replaced stale `c4-components-mobile-notebook.md` with `c4-components-notebook-editor.md`
-- New living spec: `docs/superpowers/specs/2026-04-29-architecture.md`
+_2026-05-06 — fixed login: DNS not resolving for api.mylake.tecnocriollo.com_
+- Login failed with `ERR_NAME_NOT_RESOLVED` — domain not in host `/etc/hosts`
+- nginx + certbot already configured on host (HTTPS cert valid until 2026-08-04), proxies to `127.0.0.1:8080`
+- Fix: `echo "127.0.0.1 api.mylake.tecnocriollo.com" | sudo tee -a /etc/hosts` on host machine
+- Browser makes API calls (not Docker container), so hosts entry must be on the machine running the browser
+- `frontend/.env` points to prod URL (`https://api.mylake.tecnocriollo.com`) — correct for this setup
+- Also need `127.0.0.1 mylake.tecnocriollo.com` in `/etc/hosts` for the frontend domain
 
 ## Docs
 - `README.md` — stack, quick start, features, commands
